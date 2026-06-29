@@ -1,0 +1,136 @@
+"""
+train_trigger_model.py
+
+Fine-tuning PhoBERT/XLM-R cho bài toán Joint Trigger Detection 
+và Event Type Classification (Token Classification).
+"""
+
+from pathlib import Path
+import json
+import torch
+import numpy as np
+import wandb
+from transformers import AutoTokenizer, AutoModelForTokenClassification, TrainingArguments, Trainer
+from transformers import DataCollatorForTokenClassification
+from seqeval.metrics import classification_report, f1_score, precision_score, recall_score
+
+# Cấu hình đường dẫn
+ROOT_DIR = Path(__file__).resolve().parent.parent
+DATA_DIR = ROOT_DIR / "data" / "preprocessed" / "trigger"
+LABEL_MAP_PATH = ROOT_DIR / "data" / "preprocessed" / "label_maps.json"
+
+class BKEETriggerDataset(torch.utils.data.Dataset):
+    def __init__(self, data_path, label2id, tokenizer_name="vinai/phobert-base", max_len=256):
+        with open(data_path, "r", encoding="utf8") as f:
+            self.data = json.load(f)
+        self.label2id = label2id
+        self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
+        self.max_len = max_len
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, idx):
+        item = self.data[idx]
+        tokens = item["tokens"]
+        labels = item["trigger_labels"]
+
+        # Tokenize toàn bộ câu xử lý từ ghép tiếng Việt đã nối bằng gạch dưới hoặc khoảng trắng
+        encoding = self.tokenizer(
+            tokens,
+            is_split_into_words=True,
+            return_offsets_mapping=True,
+            padding="max_length",
+            truncation=True,
+            max_length=self.max_len
+        )
+
+        # Căn chỉnh nhãn BIO theo subwords (Subword Alignment)
+        labels_ids = []
+        word_ids = encoding.word_ids()
+        previous_word_idx = None
+        
+        for word_idx in word_ids:
+            if word_idx is None:
+                labels_ids.append(-100) # Bỏ qua các token đặc biệt khi tính Loss
+            elif word_idx != previous_word_idx:
+                # Token đầu tiên của từ gốc
+                labels_ids.append(self.label2id.get(labels[word_idx], 0))
+            else:
+                # Các subword phía sau của từ gốc gán nhãn tương tự hoặc chuyển sang nhãn I-
+                labels_ids.append(self.label2id.get(labels[word_idx], 0))
+            previous_word_idx = word_idx
+
+        encoding["labels"] = labels_ids
+        # Chuyển đổi thành Tensor torch
+        return {k: torch.tensor(v) for k, v in encoding.items() if k != "offset_mapping"}
+
+def compute_metrics(p, id2label):
+    predictions, labels = p
+    predictions = np.argmax(predictions, axis=2)
+
+    true_predictions = [
+        [id2label[p] for (p, l) in zip(prediction, label) if l != -100]
+        for prediction, label in zip(predictions, labels)
+    ]
+    true_labels = [
+        [id2label[l] for (p, l) in zip(prediction, label) if l != -100]
+        for prediction, label in zip(predictions, labels)
+    ]
+
+    return {
+        "precision": precision_score(true_labels, true_predictions),
+        "recall": recall_score(true_labels, true_predictions),
+        "f1": f1_score(true_labels, true_predictions)
+    }
+
+def main():
+    # Khởi tạo W&B cho Run 03/Run 04
+    wandb.init(project="bkee-event-extraction", name="run_03_phobert_trigger")
+
+    with open(LABEL_MAP_PATH, "r", encoding="utf8") as f:
+        maps = json.load(f)
+    
+    trigger_maps = maps["trigger"]
+    label2id = trigger_maps["label2id"]
+    id2label = {int(k): v for k, v in trigger_maps["id2label"].items()}
+
+    # Tải bộ dữ liệu mẫu
+    train_dataset = BKEETriggerDataset(DATA_DIR / "train.json", label2id)
+    dev_dataset = BKEETriggerDataset(DATA_DIR / "dev.json", label2id)
+
+    # Khởi tạo mô hình PhoBERT
+    model = AutoModelForTokenClassification.from_pretrained(
+        "vinai/phobert-base", 
+        num_labels=len(label2id)
+    )
+
+    training_args = TrainingArguments(
+        output_dir="./results",
+        num_train_epochs=5,
+        per_device_train_batch_size=8,
+        per_device_eval_batch_size=8,
+        warmup_steps=100,
+        weight_decay=0.01,
+        logging_dir="./logs",
+        logging_steps=10,
+        evaluation_strategy="epoch",
+        save_strategy="epoch",
+        load_best_model_at_end=True,
+        report_to="wandb" # Tự động đẩy toàn bộ log lên W&B
+    )
+
+    trainer = Trainer(
+        model=model,
+        args=training_args,
+        train_dataset=train_dataset,
+        eval_dataset=dev_dataset,
+        data_collator=DataCollatorForTokenClassification(train_dataset.tokenizer),
+        compute_metrics=lambda p: compute_metrics(p, id2label)
+    )
+
+    trainer.train()
+    wandb.finish()
+
+if __name__ == "__main__":
+    main()
