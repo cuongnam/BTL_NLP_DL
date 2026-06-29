@@ -193,7 +193,7 @@ def main():
     
     # Đóng gói và lưu lại trọng số tốt nhất
     output_model_path = Path(ROOT_DIR) / "models" / "best_xlmr_argument"
-    output_model_path.mkdir(parents=True, exist_ok=True)
+    # output_model_path.mkdir(parents=True, exist_ok=True)
     model.save_pretrained(output_model_path)
     tokenizer.save_pretrained(output_model_path)
     print(f"Mô hình tốt nhất đã được lưu thành công tại: {output_model_path}")
