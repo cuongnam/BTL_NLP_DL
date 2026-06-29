@@ -114,7 +114,9 @@ def main():
         weight_decay=0.01,
         logging_dir="./logs",
         logging_steps=10,
-        evaluation_strategy="epoch",
+        # evaluation_strategy="epoch",
+        # save_strategy="epoch",
+        eval_strategy="epoch",        #  Đã sửa thành eval_strategy
         save_strategy="epoch",
         load_best_model_at_end=True,
         report_to="wandb" # Tự động đẩy toàn bộ log lên W&B
