@@ -112,23 +112,59 @@ class BKEETriggerDataset(torch.utils.data.Dataset):
             "labels": torch.tensor(labels_ids, dtype=torch.long)
         }
     
+# def compute_metrics(p, id2label):
+#     predictions, labels = p
+#     predictions = np.argmax(predictions, axis=2)
+
+#     true_predictions = [
+#         [id2label[p] for (p, l) in zip(prediction, label) if l != -100]
+#         for prediction, label in zip(predictions, labels)
+#     ]
+#     true_labels = [
+#         [id2label[l] for (p, l) in zip(prediction, label) if l != -100]
+#         for prediction, label in zip(predictions, labels)
+#     ]
+
+#     return {
+#         "precision": precision_score(true_labels, true_predictions),
+#         "recall": recall_score(true_labels, true_predictions),
+#         "f1": f1_score(true_labels, true_predictions)
+#     }
+
 def compute_metrics(p, id2label):
     predictions, labels = p
     predictions = np.argmax(predictions, axis=2)
 
-    true_predictions = [
-        [id2label[p] for (p, l) in zip(prediction, label) if l != -100]
-        for prediction, label in zip(predictions, labels)
-    ]
-    true_labels = [
-        [id2label[l] for (p, l) in zip(prediction, label) if l != -100]
-        for prediction, label in zip(predictions, labels)
-    ]
+    true_predictions = []
+    true_labels = []
+
+    for prediction, label in zip(predictions, labels):
+        pred_list = []
+        label_list = []
+        for p_id, l_id in zip(prediction, label):
+            if l_id != -100:  # Bỏ qua các token padding/subwords
+                # Ép khóa tìm kiếm về dạng chuỗi string để khớp với label_maps.json
+                p_str = str(p_id)
+                l_str = str(l_id)
+                
+                pred_list.append(id2label.get(p_str, "O"))
+                label_list.append(id2label.get(l_str, "O"))
+                
+        true_predictions.append(pred_list)
+        true_labels.append(label_list)
+
+    # Đề phòng trường hợp không dự đoán được nhãn nào, tránh lỗi chia cho 0
+    try:
+        p_score = precision_score(true_labels, true_predictions)
+        r_score = recall_score(true_labels, true_predictions)
+        f1 = f1_score(true_labels, true_predictions)
+    except Exception:
+        p_score, r_score, f1 = 0.0, 0.0, 0.0
 
     return {
-        "precision": precision_score(true_labels, true_predictions),
-        "recall": recall_score(true_labels, true_predictions),
-        "f1": f1_score(true_labels, true_predictions)
+        "precision": p_score,
+        "recall": r_score,
+        "f1": f1
     }
 
 def main():
@@ -140,7 +176,9 @@ def main():
     
     trigger_maps = maps["trigger"]
     label2id = trigger_maps["label2id"]
-    id2label = {int(k): v for k, v in trigger_maps["id2label"].items()}
+    # id2label = {int(k): v for k, v in trigger_maps["id2label"].items()}
+    # THAY BẰNG DÒNG NÀY (Giữ nguyên string key từ JSON):
+    id2label = trigger_maps["id2label"]
 
     # Tải bộ dữ liệu mẫu
     train_dataset = BKEETriggerDataset(DATA_DIR / "train.json", label2id)
