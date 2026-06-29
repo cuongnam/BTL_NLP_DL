@@ -19,6 +19,71 @@ ROOT_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = ROOT_DIR / "data" / "preprocessed" / "argument"
 LABEL_MAP_PATH = ROOT_DIR / "data" / "preprocessed" / "label_maps.json"
 
+# class BKEEArgumentDataset(torch.utils.data.Dataset):
+#     def __init__(self, data_path, label2id, tokenizer_name="vinai/phobert-base", max_len=256):
+#         with open(data_path, "r", encoding="utf8") as f:
+#             self.data = json.load(f)
+#         self.label2id = label2id
+#         self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
+#         self.max_len = max_len
+
+#     def __len__(self):
+#         return len(self.data)
+
+#     def __getitem__(self, idx):
+#         item = self.data[idx]
+#         pieces = item["pieces"]
+#         token_lens = item["token_lens"]
+#         labels = item["argument_labels"] # Khớp chuẩn xác với sample thực tế
+
+#         # Làm sạch ký tự đặc biệt "▁" tương tự các run trước
+#         cleaned_pieces = [p.replace("▁", "") for p in pieces]
+
+#         # 1. Mã hóa chuỗi subword về ID của PhoBERT kèm token đặc biệt <s> và </s>
+#         input_ids = [self.tokenizer.bos_token_id] + self.tokenizer.convert_tokens_to_ids(cleaned_pieces) + [self.tokenizer.eos_token_id]
+#         attention_mask = [1] * len(input_ids)
+
+#         # 2. Căn chỉnh nhãn Subword Alignment
+#         labels_ids = [-100]  # Token đầu <s> nhận -100 để bỏ qua khi tính Loss
+        
+#         for word_idx, length in enumerate(token_lens):
+#             word_label = labels[word_idx]
+            
+#             # Tra cứu ID nhãn BIO thực tế từ nhánh "argument" trong file label_maps.json
+#             label_id = self.label2id.get(word_label, self.label2id.get("O", 0))
+            
+#             # Gán nhãn cho subword đầu tiên cấu thành nên từ gốc
+#             labels_ids.append(label_id)
+            
+#             # Gán nhãn -100 cho phần đuôi từ bị cắt nhỏ để tránh làm nhiễu mô hình
+#             for _ in range(length - 1):
+#                 labels_ids.append(-100) 
+
+#         labels_ids.append(-100)  # Token cuối </s> nhận -100
+
+#         # Phòng vệ lệch độ dài mảng cấu trúc dữ liệu
+#         if len(input_ids) != len(labels_ids):
+#             min_len = min(len(input_ids), len(labels_ids))
+#             input_ids = input_ids[:min_len]
+#             attention_mask = attention_mask[:min_len]
+#             labels_ids = labels_ids[:min_len]
+
+#         # 3. Padding hoặc Truncate về max_len=256
+#         pad_len = self.max_len - len(input_ids)
+#         if pad_len > 0:
+#             input_ids += [self.tokenizer.pad_token_id] * pad_len
+#             attention_mask += [0] * pad_len
+#             labels_ids += [-100] * pad_len
+#         else:
+#             input_ids = input_ids[:self.max_len]
+#             attention_mask = attention_mask[:self.max_len]
+#             labels_ids = labels_ids[:self.max_len]
+
+#         return {
+#             "input_ids": torch.tensor(input_ids, dtype=torch.long),
+#             "attention_mask": torch.tensor(attention_mask, dtype=torch.long),
+#             "labels": torch.tensor(labels_ids, dtype=torch.long)
+#         }
 class BKEEArgumentDataset(torch.utils.data.Dataset):
     def __init__(self, data_path, label2id, tokenizer_name="vinai/phobert-base", max_len=256):
         with open(data_path, "r", encoding="utf8") as f:
@@ -34,34 +99,47 @@ class BKEEArgumentDataset(torch.utils.data.Dataset):
         item = self.data[idx]
         pieces = item["pieces"]
         token_lens = item["token_lens"]
-        labels = item["argument_labels"] # Khớp chuẩn xác với sample thực tế
+        labels = item["argument_labels"]
 
-        # Làm sạch ký tự đặc biệt "▁" tương tự các run trước
+        # Làm sạch ký tự đặc biệt "▁"
         cleaned_pieces = [p.replace("▁", "") for p in pieces]
 
-        # 1. Mã hóa chuỗi subword về ID của PhoBERT kèm token đặc biệt <s> và </s>
+        # 1. Mã hóa chuỗi subword thành ID kèm <s> và </s>
         input_ids = [self.tokenizer.bos_token_id] + self.tokenizer.convert_tokens_to_ids(cleaned_pieces) + [self.tokenizer.eos_token_id]
         attention_mask = [1] * len(input_ids)
 
-        # 2. Căn chỉnh nhãn Subword Alignment
-        labels_ids = [-100]  # Token đầu <s> nhận -100 để bỏ qua khi tính Loss
+        # 2. Căn chỉnh nhãn Subword Alignment có tính đến Marker <tg> và </tg>
+        labels_ids = [-100]  # Đầu <s> nhận -100
         
-        for word_idx, length in enumerate(token_lens):
-            word_label = labels[word_idx]
+        # Biến đếm index chạy riêng cho mảng argument_labels gốc để tránh bị lệch index do Marker
+        original_word_idx = 0 
+        
+        for p_idx, length in enumerate(token_lens):
+            # Lấy token dạng chuỗi hiện tại để kiểm tra xem có phải Marker không
+            current_piece = pieces[p_idx] if p_idx < len(pieces) else ""
             
-            # Tra cứu ID nhãn BIO thực tế từ nhánh "argument" trong file label_maps.json
-            label_id = self.label2id.get(word_label, self.label2id.get("O", 0))
-            
-            # Gán nhãn cho subword đầu tiên cấu thành nên từ gốc
-            labels_ids.append(label_id)
-            
-            # Gán nhãn -100 cho phần đuôi từ bị cắt nhỏ để tránh làm nhiễu mô hình
-            for _ in range(length - 1):
-                labels_ids.append(-100) 
+            # Nếu gặp token marker, gán ngay nhãn -100 để bỏ qua (Không tính loss)
+            if "<tg>" in current_piece or "</tg>" in current_piece:
+                for _ in range(length):
+                    labels_ids.append(-100)
+            else:
+                # Nếu là từ bình thường, lấy nhãn từ mảng labels gốc dựa trên original_word_idx
+                word_label = labels[original_word_idx]
+                label_id = self.label2id.get(word_label, self.label2id.get("O", 0))
+                
+                # Gán nhãn cho subword đầu tiên của từ gốc
+                labels_ids.append(label_id)
+                
+                # Gán -100 cho các subword phía sau của từ đó
+                for _ in range(length - 1):
+                    labels_ids.append(-100)
+                
+                # Chỉ tăng index từ gốc khi xử lý xong một từ thực tế (không phải marker)
+                original_word_idx += 1
 
-        labels_ids.append(-100)  # Token cuối </s> nhận -100
+        labels_ids.append(-100)  # Cuối </s> nhận -100
 
-        # Phòng vệ lệch độ dài mảng cấu trúc dữ liệu
+        # Phòng vệ lệch độ dài mảng cấu trúc dữ liệu do rút gọn
         if len(input_ids) != len(labels_ids):
             min_len = min(len(input_ids), len(labels_ids))
             input_ids = input_ids[:min_len]
@@ -84,7 +162,7 @@ class BKEEArgumentDataset(torch.utils.data.Dataset):
             "attention_mask": torch.tensor(attention_mask, dtype=torch.long),
             "labels": torch.tensor(labels_ids, dtype=torch.long)
         }
-    
+        
 def compute_metrics(p, id2label):
     predictions, labels = p
     predictions = np.argmax(predictions, axis=2)
