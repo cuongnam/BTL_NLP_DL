@@ -20,10 +20,16 @@ from seqeval.metrics import classification_report, f1_score, precision_score, re
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
-# Cấu hình đường dẫn
-ROOT_DIR = Path(__file__).resolve().parent
-DATA_DIR = ROOT_DIR / "data" / "preprocessed" / "trigger"
+# # Cấu hình đường dẫn
+# ROOT_DIR = Path(__file__).resolve().parent
+# DATA_DIR = ROOT_DIR / "data" / "preprocessed" / "trigger"
+# Cấu hình đường dẫn cũ (Bị lỗi trên Kaggle do tính từ thư mục src)
+# ROOT_DIR = Path(__file__).resolve().parent
+# DATA_DIR = ROOT_DIR / "data" / "preprocessed" / "trigger"
 
+# SỬA LẠI THÀNH THẾ NÀY:
+ROOT_DIR = Path(__file__).resolve().parent.parent # Lấy thư mục cha của src (tức là BTL_NLP_DL)
+DATA_DIR = ROOT_DIR / "data" / "preprocessed" / "trigger"
 # ============================================================
 # 1. ĐỌC DỮ LIỆU
 # ============================================================
