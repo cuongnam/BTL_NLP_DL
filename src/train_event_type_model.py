@@ -92,7 +92,15 @@ class BKEEEventTypeDataset(torch.utils.data.Dataset):
     def __init__(self, data_path, label2id, tokenizer_name="vinai/phobert-base", max_len=256):
         with open(data_path, "r", encoding="utf8") as f:
             self.data = json.load(f)
-        self.label2id = label2id
+        
+        # Tạo bản sao cục bộ để tránh ghi đè làm hỏng tham chiếu gốc
+        self.label2id = label2id.copy()
+        
+        # GIẢI PHÁP: Tự động bổ sung nhãn "O" vào ID trống cuối cùng (ID 33) để mô hình học từ thường
+        if "O" not in self.label2id:
+            new_id = max(self.label2id.values()) + 1 if self.label2id else 0
+            self.label2id["O"] = new_id
+            
         self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
         self.max_len = max_len
 
@@ -104,11 +112,8 @@ class BKEEEventTypeDataset(torch.utils.data.Dataset):
         pieces = item["pieces"]
         token_lens = item["token_lens"]
         
-        # === DỰNG LẠI CHUỖI NHÃN DẠNG THÔ THEO SAMPLE ===
         num_words = len(token_lens)
-        # Sử dụng nhãn "O" đại diện cho từ thường. Do label2id không có "O", 
-        # lát nữa chúng ta sẽ map "O" thành -100 để bỏ qua khi tính Loss.
-        word_labels = ["O"] * num_words  
+        word_labels = ["O"] * num_words  # Mặc định ban đầu toàn bộ câu mang nhãn "O"
         
         trigger_info = item.get("trigger", {})
         event_type = item.get("event_type", "O")
@@ -117,7 +122,6 @@ class BKEEEventTypeDataset(torch.utils.data.Dataset):
             start_idx = trigger_info.get("start")
             end_idx = trigger_info.get("end")
             
-            # Gán trực tiếp tên sự kiện thô (Raw) vào đúng vị trí của trigger trong câu
             if start_idx is not None and start_idx < num_words:
                 word_labels[start_idx] = event_type
                 
@@ -126,44 +130,34 @@ class BKEEEventTypeDataset(torch.utils.data.Dataset):
                     if i < num_words:
                         word_labels[i] = event_type
 
-        # Làm sạch ký tự đặc biệt "▁" tương tự Run 03
         cleaned_pieces = [p.replace("▁", "") for p in pieces]
 
-        # 1. Mã hóa chuỗi subword thành ID của PhoBERT kèm <s> và </s>
         input_ids = [self.tokenizer.bos_token_id] + self.tokenizer.convert_tokens_to_ids(cleaned_pieces) + [self.tokenizer.eos_token_id]
         attention_mask = [1] * len(input_ids)
 
-        # 2. Căn chỉnh nhãn Subword Alignment khớp với label_maps.json thô
         labels_ids = [-100] # Đầu <s> nhận -100
         
         for word_idx, length in enumerate(token_lens):
             word_label = word_labels[word_idx]
             
-            if word_label == "O":
-                # VÌ TRONG FILE JSON KHÔNG CÓ NHÃN "O", ta gán -100 để mô hình bỏ qua, không tính loss tại các từ thường này.
-                # Cách này giúp PhoBERT tập trung học cực tốt các từ kích hoạt sự kiện thực tế.
-                label_id = -100 
-            else:
-                # Khớp tên sự kiện thô (ví dụ: "Start-org") với ID tương ứng (26)
-                label_id = self.label2id.get(word_label, -100)
+            # Lấy đúng ID thực tế (Nếu là "O" sẽ lấy ID 33 thay vì bị chuyển thành -100 như trước)
+            label_id = self.label2id.get(word_label, self.label2id["O"])
             
-            # Gán nhãn cho subword đầu tiên của từ
+            # Gán nhãn cho subword đầu tiên của từ gốc
             labels_ids.append(label_id)
             
-            # Các subword phía sau gán -100 để tránh làm nhiễu mô hình
+            # Các subword đi kèm phía sau của từ gốc vẫn giữ nguyên -100 để không tính loss trùng lặp
             for _ in range(length - 1):
                 labels_ids.append(-100) 
 
         labels_ids.append(-100) # Cuối </s> nhận -100
 
-        # Phòng vệ lệch độ dài mảng
         if len(input_ids) != len(labels_ids):
             min_len = min(len(input_ids), len(labels_ids))
             input_ids = input_ids[:min_len]
             attention_mask = attention_mask[:min_len]
             labels_ids = labels_ids[:min_len]
 
-        # 3. Padding hoặc Truncate về max_len=256
         pad_len = self.max_len - len(input_ids)
         if pad_len > 0:
             input_ids += [self.tokenizer.pad_token_id] * pad_len
@@ -232,9 +226,15 @@ def main():
     dev_dataset = BKEEEventTypeDataset(DATA_DIR / "dev.json", label2id)
 
     # Khởi tạo mô hình PhoBERT với num_labels tương ứng số loại sự kiện (33 nhãn)
+    # model = AutoModelForTokenClassification.from_pretrained(
+    #     "vinai/phobert-base", 
+    #     num_labels=len(label2id)
+    # )
+
+    # Thay vì num_labels=len(label2id) cũ, hãy cộng thêm 1:
     model = AutoModelForTokenClassification.from_pretrained(
         "vinai/phobert-base", 
-        num_labels=len(label2id)
+        num_labels=len(label2id) + 1  # Cộng thêm 1 đại diện cho nhãn "O" kế thừa
     )
 
     # Thiết lập siêu tham số tối ưu (Tăng nhẹ học vị và cấu hình Batch Size)
