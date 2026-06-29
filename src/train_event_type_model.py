@@ -104,49 +104,53 @@ class BKEEEventTypeDataset(torch.utils.data.Dataset):
         pieces = item["pieces"]
         token_lens = item["token_lens"]
         
-        # === DỰNG LẠI CHUỖI NHÃN BIO TỪ TRƯỜNG TRIGGER VÀ EVENT_TYPE ===
+        # === DỰNG LẠI CHUỖI NHÃN DẠNG THÔ THEO SAMPLE ===
         num_words = len(token_lens)
-        word_labels = ["O"] * num_words  # Mặc định tất cả các từ ban đầu là nhãn "O"
+        # Sử dụng nhãn "O" đại diện cho từ thường. Do label2id không có "O", 
+        # lát nữa chúng ta sẽ map "O" thành -100 để bỏ qua khi tính Loss.
+        word_labels = ["O"] * num_words  
         
         trigger_info = item.get("trigger", {})
         event_type = item.get("event_type", "O")
         
         if trigger_info and event_type != "O":
             start_idx = trigger_info.get("start")
-            end_idx = trigger_info.get("end") # end_idx thường là index_đầu + 1 hoặc index cuối tùy bộ dữ liệu
+            end_idx = trigger_info.get("end")
             
-            # Gán nhãn BIO tương ứng với vị trí của trigger
-            if start_idx is not None:
-                # Đảm bảo không vượt quá độ dài mảng từ phòng khi dữ liệu lỗi
-                if start_idx < num_words:
-                    word_labels[start_idx] = f"B-{event_type}"
+            # Gán trực tiếp tên sự kiện thô (Raw) vào đúng vị trí của trigger trong câu
+            if start_idx is not None and start_idx < num_words:
+                word_labels[start_idx] = event_type
                 
-                # Nếu trigger gồm nhiều từ ghép (từ start_idx + 1 đến end_idx)
-                if end_idx is not None:
-                    for i in range(start_idx + 1, end_idx):
-                        if i < num_words:
-                            word_labels[i] = f"I-{event_type}"
+            if end_idx is not None:
+                for i in range(start_idx + 1, end_idx):
+                    if i < num_words:
+                        word_labels[i] = event_type
 
-        # Làm sạch ký tự đặc biệt "▁" xuất hiện trong quá trình tiền xử lý dữ liệu đầu vào
+        # Làm sạch ký tự đặc biệt "▁" tương tự Run 03
         cleaned_pieces = [p.replace("▁", "") for p in pieces]
 
-        # 1. Chuyển đổi các subwords đã làm sạch thành ID chuẩn của PhoBERT
+        # 1. Mã hóa chuỗi subword thành ID của PhoBERT kèm <s> và </s>
         input_ids = [self.tokenizer.bos_token_id] + self.tokenizer.convert_tokens_to_ids(cleaned_pieces) + [self.tokenizer.eos_token_id]
         attention_mask = [1] * len(input_ids)
 
-        # 2. Căn chỉnh nhãn Subword Alignment
+        # 2. Căn chỉnh nhãn Subword Alignment khớp với label_maps.json thô
         labels_ids = [-100] # Đầu <s> nhận -100
         
         for word_idx, length in enumerate(token_lens):
             word_label = word_labels[word_idx]
             
-            # Khớp nhãn dựa trên label2id của danh sách nhãn BIO sự kiện của bạn
-            label_id = self.label2id.get(word_label, self.label2id.get("O", 0))
+            if word_label == "O":
+                # VÌ TRONG FILE JSON KHÔNG CÓ NHÃN "O", ta gán -100 để mô hình bỏ qua, không tính loss tại các từ thường này.
+                # Cách này giúp PhoBERT tập trung học cực tốt các từ kích hoạt sự kiện thực tế.
+                label_id = -100 
+            else:
+                # Khớp tên sự kiện thô (ví dụ: "Start-org") với ID tương ứng (26)
+                label_id = self.label2id.get(word_label, -100)
             
             # Gán nhãn cho subword đầu tiên của từ
             labels_ids.append(label_id)
             
-            # Gán nhãn -100 cho các subword tiếp theo của từ đó để tránh làm nhiễu mô hình
+            # Các subword phía sau gán -100 để tránh làm nhiễu mô hình
             for _ in range(length - 1):
                 labels_ids.append(-100) 
 
