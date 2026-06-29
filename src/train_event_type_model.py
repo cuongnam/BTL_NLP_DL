@@ -12,7 +12,9 @@ import numpy as np
 import wandb
 from transformers import AutoTokenizer, AutoModelForTokenClassification, TrainingArguments, Trainer
 from transformers import DataCollatorForTokenClassification
-from seqeval.metrics import classification_report, f1_score, precision_score, recall_score
+# from seqeval.metrics import classification_report, f1_score, precision_score, recall_score
+
+from sklearn.metrics import precision_recall_fscore_support
 
 # ========================================================
 # 1. CẤU HÌNH ĐƯỜNG DẪN CHUẨN XÁC ĐẾN THƯ MỤC EVENT_TYPE
@@ -118,36 +120,43 @@ def compute_metrics(p, id2label):
     true_predictions = []
     true_labels = []
 
-    # Cập nhật bản sao id2label nội bộ để chứa ánh xạ "33": "O" nhằm phục vụ hàm eval
+    # Tạo bản sao cục bộ để mapping nhãn "33" thành "O" cho mượt mà
     local_id2label = id2label.copy()
     if "33" not in local_id2label:
         local_id2label["33"] = "O"
 
     for prediction, label in zip(predictions, labels):
-        pred_list = []
-        label_list = []
         for p_id, l_id in zip(prediction, label):
-            if l_id != -100:  
+            if l_id != -100:  # Bỏ qua các token không tính toán loss
                 p_str = str(p_id)
                 l_str = str(l_id)
                 
-                pred_list.append(local_id2label.get(p_str, "O"))
-                label_list.append(local_id2label.get(l_str, "O"))
+                # Lấy tên nhãn dạng chuỗi (ví dụ: "Transport", "O")
+                pred_label = local_id2label.get(p_str, "O")
+                true_label = local_id2label.get(l_str, "O")
                 
-        true_predictions.append(pred_list)
-        true_labels.append(label_list)
+                # CHỈ TÍNH METRIC TRÊN CÁC TỪ CÓ SỰ KIỆN THỰC TẾ
+                # (Bỏ qua nhãn "O" khi đánh giá để phản ánh đúng thực tế mô hình tìm được sự kiện hay không)
+                if true_label != "O" or pred_label != "O":
+                    true_labels.append(true_label)
+                    true_predictions.append(pred_label)
 
-    try:
-        p_score = precision_score(true_labels, true_predictions)
-        r_score = recall_score(true_labels, true_predictions)
-        f1 = f1_score(true_labels, true_predictions)
-    except Exception:
-        p_score, r_score, f1 = 0.0, 0.0, 0.0
+    # Nếu không có từ sự kiện nào được dự đoán hoặc có trong nhãn gốc ở tập eval
+    if len(true_labels) == 0:
+        return {"precision": 0.0, "recall": 0.0, "f1": 0.0}
+
+    # Sử dụng scikit-learn để tính toán dạng phẳng (Micro Average thường chuẩn nhất cho tập dữ liệu mất cân bằng)
+    p_score, r_score, f1, _ = precision_recall_fscore_support(
+        true_labels, 
+        true_predictions, 
+        average="micro", 
+        zero_division=0
+    )
 
     return {
-        "precision": p_score,
-        "recall": r_score,
-        "f1": f1
+        "precision": float(p_score),
+        "recall": float(r_score),
+        "f1": float(f1)
     }
 
 def main():
