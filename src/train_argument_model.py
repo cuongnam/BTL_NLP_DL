@@ -90,6 +90,8 @@ class BKEEArgumentDataset(torch.utils.data.Dataset):
             self.data = json.load(f)
         self.label2id = label2id
         self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
+        # THÊM DÒNG NÀY: Ép tokenizer không được cắt nhỏ cặp marker này
+        self.tokenizer.add_special_tokens({'additional_special_tokens': ['<tg>', '</tg>']})
         self.max_len = max_len
 
     def __len__(self):
@@ -229,11 +231,17 @@ def main():
     train_dataset = BKEEArgumentDataset(DATA_DIR / "train.json", label2id)
     dev_dataset = BKEEArgumentDataset(DATA_DIR / "dev.json", label2id)
 
+    # Khởi tạo Tokenizer ngoài hàm main và thêm token đặc biệt
+    tokenizer = AutoTokenizer.from_pretrained("vinai/phobert-base")
+    tokenizer.add_special_tokens({'additional_special_tokens': ['<tg>', '</tg>']})
+
     # Khởi tạo mô hình PhoBERT khớp chính xác với số lượng nhãn BIO của tham thể (không cần +1)
     model = AutoModelForTokenClassification.from_pretrained(
         "vinai/phobert-base", 
         num_labels=len(label2id)
     )
+    # THÊM DÒNG NÀY: Mở rộng tầng Embedding của mô hình để nó học Vector đại diện cho <tg> và </tg>
+    model.resize_token_embeddings(len(tokenizer))
 
     # Siêu tham số tối ưu hóa cho bài toán trích xuất thực thể/vai trò
     training_args = TrainingArguments(
