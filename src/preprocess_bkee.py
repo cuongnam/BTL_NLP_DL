@@ -536,9 +536,66 @@ def create_argument_labels(record: Dict,
 # ============================================================
 
 
+# def build_argument_dataset(records: List[Dict]) -> List[Dict]:
+#     """
+#     One event = one sample.
+#     """
+
+#     dataset = []
+
+#     for record in records:
+
+#         for event in record["event_mentions"]:
+
+#             trigger = event["trigger"]
+
+#             sample = {
+
+#                 "id": event["id"],
+
+#                 "doc_id": record["doc_id"],
+
+#                 "sentence": record["sentence"],
+
+#                 "tokens": record["tokens"],
+
+#                 "pieces": record["pieces"],
+
+#                 "token_lens": record["token_lens"],
+
+#                 "trigger": {
+
+#                     "text": trigger["text"],
+
+#                     "start": trigger["start"],
+
+#                     "end": trigger["end"]
+
+#                 },
+
+#                 "event_type": event["event_type"],
+
+#                 "argument_labels":
+#                     create_argument_labels(
+#                         record,
+#                         event
+#                     )
+
+#             }
+
+#             dataset.append(sample)
+
+#     logger.info(
+#         f"Argument dataset created : {len(dataset)} samples"
+#     )
+
+#     return dataset
+
 def build_argument_dataset(records: List[Dict]) -> List[Dict]:
     """
     One event = one sample.
+    Đã cải tiến: Chèn thêm marker <tg> và </tg> bọc quanh Trigger trong mảng pieces 
+    và cập nhật lại token_lens tương ứng để mồi thông tin ngữ cảnh cho PhoBERT.
     """
 
     dataset = []
@@ -548,6 +605,31 @@ def build_argument_dataset(records: List[Dict]) -> List[Dict]:
         for event in record["event_mentions"]:
 
             trigger = event["trigger"]
+            trigger_start = trigger["start"]
+            trigger_end = trigger["end"]
+
+            # --- LOGIC CẢI TIẾN: CHÈN MARKER ĐÁNH DẤU TRIGGER ---
+            new_pieces = []
+            new_token_lens = []
+            current_piece_idx = 0
+
+            for word_idx, length in enumerate(record["token_lens"]):
+                # Nếu bắt đầu đến từ Trigger, chèn thêm token mở <tg>
+                if word_idx == trigger_start:
+                    new_pieces.append("<tg>")
+                    new_token_lens.append(1) # Token đặc biệt tính độ dài là 1
+
+                # Lấy các subwords (pieces) thuộc về từ hiện tại
+                word_pieces = record["pieces"][current_piece_idx : current_piece_idx + length]
+                new_pieces.extend(word_pieces)
+                new_token_lens.append(length)
+                current_piece_idx += length
+
+                # Nếu kết thúc từ Trigger, chèn thêm token đóng </tg>
+                if word_idx == trigger_end - 1:
+                    new_pieces.append("</tg>")
+                    new_token_lens.append(1) # Token đặc biệt tính độ dài là 1
+            # ----------------------------------------------------
 
             sample = {
 
@@ -559,9 +641,10 @@ def build_argument_dataset(records: List[Dict]) -> List[Dict]:
 
                 "tokens": record["tokens"],
 
-                "pieces": record["pieces"],
+                # Sử dụng mảng pieces và token_lens mới đã có Marker
+                "pieces": new_pieces,
 
-                "token_lens": record["token_lens"],
+                "token_lens": new_token_lens,
 
                 "trigger": {
 
@@ -586,11 +669,10 @@ def build_argument_dataset(records: List[Dict]) -> List[Dict]:
             dataset.append(sample)
 
     logger.info(
-        f"Argument dataset created : {len(dataset)} samples"
+        f"Argument dataset created (with Trigger Markers): {len(dataset)} samples"
     )
 
     return dataset
-
 
 # ============================================================
 # LABEL MAPS
