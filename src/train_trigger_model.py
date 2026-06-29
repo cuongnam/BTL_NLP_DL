@@ -30,41 +30,88 @@ class BKEETriggerDataset(torch.utils.data.Dataset):
     def __len__(self):
         return len(self.data)
 
+    # def __getitem__(self, idx):
+    #     item = self.data[idx]
+    #     tokens = item["tokens"]
+    #     labels = item["trigger_labels"]
+
+    #     # Tokenize toàn bộ câu xử lý từ ghép tiếng Việt đã nối bằng gạch dưới hoặc khoảng trắng
+    #     encoding = self.tokenizer(
+    #         tokens,
+    #         is_split_into_words=True,
+    #         return_offsets_mapping=True,
+    #         padding="max_length",
+    #         truncation=True,
+    #         max_length=self.max_len
+    #     )
+
+    #     # Căn chỉnh nhãn BIO theo subwords (Subword Alignment)
+    #     labels_ids = []
+    #     word_ids = encoding.word_ids()
+    #     previous_word_idx = None
+        
+    #     for word_idx in word_ids:
+    #         if word_idx is None:
+    #             labels_ids.append(-100) # Bỏ qua các token đặc biệt khi tính Loss
+    #         elif word_idx != previous_word_idx:
+    #             # Token đầu tiên của từ gốc
+    #             labels_ids.append(self.label2id.get(labels[word_idx], 0))
+    #         else:
+    #             # Các subword phía sau của từ gốc gán nhãn tương tự hoặc chuyển sang nhãn I-
+    #             labels_ids.append(self.label2id.get(labels[word_idx], 0))
+    #         previous_word_idx = word_idx
+
+    #     encoding["labels"] = labels_ids
+    #     # Chuyển đổi thành Tensor torch
+    #     return {k: torch.tensor(v) for k, v in encoding.items() if k != "offset_mapping"}
     def __getitem__(self, idx):
         item = self.data[idx]
-        tokens = item["tokens"]
+        pieces = item["pieces"]
+        token_lens = item["token_lens"]
         labels = item["trigger_labels"]
 
-        # Tokenize toàn bộ câu xử lý từ ghép tiếng Việt đã nối bằng gạch dưới hoặc khoảng trắng
-        encoding = self.tokenizer(
-            tokens,
-            is_split_into_words=True,
-            return_offsets_mapping=True,
-            padding="max_length",
-            truncation=True,
-            max_length=self.max_len
-        )
+        # 1. Chuyển đổi trực tiếp các subwords (pieces) có sẵn thành ID của PhoBERT
+        # Thêm token đặc biệt đầu <s> và cuối </s> theo chuẩn PhoBERT
+        input_ids = [self.tokenizer.bos_token_id] + self.tokenizer.convert_tokens_to_ids(pieces) + [self.tokenizer.eos_token_id]
+        attention_mask = [1] * len(input_ids)
 
-        # Căn chỉnh nhãn BIO theo subwords (Subword Alignment)
-        labels_ids = []
-        word_ids = encoding.word_ids()
-        previous_word_idx = None
+        # 2. Tự căn chỉnh nhãn theo trường token_lens có sẵn của bạn
+        # Token đầu <s> nhận nhãn -100 để bỏ qua khi tính Loss
+        labels_ids = [-100] 
         
-        for word_idx in word_ids:
-            if word_idx is None:
-                labels_ids.append(-100) # Bỏ qua các token đặc biệt khi tính Loss
-            elif word_idx != previous_word_idx:
-                # Token đầu tiên của từ gốc
-                labels_ids.append(self.label2id.get(labels[word_idx], 0))
-            else:
-                # Các subword phía sau của từ gốc gán nhãn tương tự hoặc chuyển sang nhãn I-
-                labels_ids.append(self.label2id.get(labels[word_idx], 0))
-            previous_word_idx = word_idx
+        for word_idx, length in enumerate(token_lens):
+            word_label = labels[word_idx]
+            label_id = self.label2id.get(word_label, 0)
+            
+            # Gán nhãn cho subword đầu tiên của từ
+            labels_ids.append(label_id)
+            
+            # Gán nhãn cho các subword tiếp theo của từ đó (nếu từ bị cắt nhỏ)
+            # Có thể gán nhãn tương tự hoặc gán nhãn -100 tùy chiến lược, ở đây gán -100 để tránh nhiễu mô hình
+            for _ in range(length - 1):
+                labels_ids.append(-100) 
 
-        encoding["labels"] = labels_ids
-        # Chuyển đổi thành Tensor torch
-        return {k: torch.tensor(v) for k, v in encoding.items() if k != "offset_mapping"}
+        # Token cuối </s> nhận nhãn -100
+        labels_ids.append(-100)
 
+        # 3. Padding thủ công để đảm bảo độ dài max_len
+        pad_len = self.max_len - len(input_ids)
+        if pad_len > 0:
+            input_ids += [self.tokenizer.pad_token_id] * pad_len
+            attention_mask += [0] * pad_len
+            labels_ids += [-100] * pad_len
+        else:
+            # Truncate nếu vượt quá max_len
+            input_ids = input_ids[:self.max_len]
+            attention_mask = attention_mask[:self.max_len]
+            labels_ids = labels_ids[:self.max_len]
+
+        return {
+            "input_ids": torch.tensor(input_ids, dtype=torch.long),
+            "attention_mask": torch.tensor(attention_mask, dtype=torch.long),
+            "labels": torch.tensor(labels_ids, dtype=torch.long)
+        }
+    
 def compute_metrics(p, id2label):
     predictions, labels = p
     predictions = np.argmax(predictions, axis=2)
