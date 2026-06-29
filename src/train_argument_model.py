@@ -103,81 +103,82 @@ class BKEEArgumentDataset(torch.utils.data.Dataset):
         token_lens = item["token_lens"]
         labels = item["argument_labels"]
         
-        # Lấy thông tin vị trí từ kích hoạt gốc ban đầu
         trigger_info = item.get("trigger", {})
         trigger_start = trigger_info.get("start", -1)
         trigger_end = trigger_info.get("end", -1)
 
-        # Làm sạch ký tự đặc biệt "▁"
-        cleaned_pieces = [p.replace("▁", "") for p in pieces]
+        # 1. TẠO CHUỖI PIECES VÀ LABELS MỚI CÓ CHÈN MARKER TRỰC TIẾP
+        marked_pieces = []
+        marked_labels_ids = []
+        
+        # Thêm token đầu câu <s>
+        marked_labels_ids.append(-100) 
+        
+        for word_idx, length in enumerate(token_lens):
+            # Nếu chạy quá mảng nhãn phòng vệ
+            if word_idx >= len(labels):
+                break
+                
+            # Chèn thẻ mở <tg> ngay trước từ bắt đầu trigger
+            if word_idx == trigger_start:
+                marked_pieces.append("<tg>")
+                marked_labels_ids.append(-100) # Thẻ đặc biệt không tính loss
+                
+            # Nạp từ hiện tại và xử lý subword alignment
+            word_label = labels[word_idx]
+            label_id = self.label2id.get(word_label, self.label2id.get("O", 0))
+            
+            # Lấy các mảnh subword của từ này
+            start_p = sum(token_lens[:word_idx])
+            end_p = start_p + length
+            word_subwords = pieces[start_p:end_p]
+            
+            # Nạp subword đầu tiên kèm nhãn thực tế
+            marked_pieces.append(word_subwords[0])
+            marked_labels_ids.append(label_id)
+            
+            # Nạp các subword sau kèm nhãn -100
+            for subword in word_subwords[1:]:
+                marked_pieces.append(subword)
+                marked_labels_ids.append(-100)
+                
+            # Chèn thẻ đóng </tg> ngay sau khi kết thúc từ trigger_end - 1
+            if word_idx == (trigger_end - 1):
+                marked_pieces.append("</tg>")
+                marked_labels_ids.append(-100)
 
-        # 1. Mã hóa chuỗi subword thành ID kèm token đặc biệt <s> và </s>
+        # Thêm token cuối câu </s>
+        marked_labels_ids.append(-100)
+
+        # Làm sạch ký tự đặc biệt "▁"
+        cleaned_pieces = [p.replace("▁", "") for p in marked_pieces]
+
+        # 2. CHUYỂN ĐỔI THÀNH TENSOR KHÔNG DÙNG THÊM BOS/EOS (vì đã chèn thủ công ở trên)
         input_ids = [self.tokenizer.bos_token_id] + self.tokenizer.convert_tokens_to_ids(cleaned_pieces) + [self.tokenizer.eos_token_id]
         attention_mask = [1] * len(input_ids)
 
-        # 2. Căn chỉnh nhãn Subword Alignment bằng cách theo dõi index từ gốc
-        labels_ids = [-100]  # Đầu câu <s> nhận -100
-        
-        original_word_idx = 0 
-        
-        # Sử dụng biến cờ để xác định xem marker đã xuất hiện hay chưa dựa trên logic nạp của file preprocess
-        for length in token_lens:
-            
-            # KIỂM TRA ĐIỀU KIỆN RANH GIỚI:
-            # Nếu original_word_idx đã chạy hết mảng nhãn gốc, mọi token dôi ra phía sau đều là marker hoặc ký tự đặc biệt bổ sung
-            if original_word_idx >= len(labels):
-                for _ in range(length):
-                    labels_ids.append(-100)
-                continue
-                
-            # Kiểm tra xem từ hiện tại có phải là marker dựa trên vị trí từ thực tế
-            # File preprocess chèn <tg> ngay TẠI vị trí trigger_start, và chèn </tg> SAU vị trí (trigger_end - 1)
-            # Nhận diện marker vì độ dài token_lens của marker luôn bằng 1 và không khớp với vị trí từ thông thường.
-            
-            # Logic phòng vệ chuẩn: Nếu độ dài là 1 và vị trí lặp hiện tại tương ứng với điểm chèn marker
-            if length == 1 and (original_word_idx == trigger_start or original_word_idx == trigger_end):
-                # Đây là token marker đặc biệt (<tg> hoặc </tg>), gán nhãn -100 (Bỏ qua không tính loss)
-                labels_ids.append(-100)
-                # KHÔNG tăng original_word_idx vì đây không phải từ gốc trong câu
-            else:
-                # Đây là từ nội dung gốc trong câu văn
-                word_label = labels[original_word_idx]
-                label_id = self.label2id.get(word_label, self.label2id.get("O", 0))
-                
-                # Gán nhãn thực tế cho subword đầu tiên của từ
-                labels_ids.append(label_id)
-                
-                # Gán nhãn -100 cho các subwords thừa (nếu từ bị phân rã thành nhiều mảnh nhỏ)
-                for _ in range(length - 1):
-                    labels_ids.append(-100)
-                
-                # Hoàn thành 1 từ gốc thành công -> tăng index để chuyển sang từ tiếp theo
-                original_word_idx += 1
-
-        labels_ids.append(-100)  # Cuối câu </s> nhận -100
-
-        # Phòng vệ lệch độ dài mảng cấu trúc dữ liệu do rút gọn
-        if len(input_ids) != len(labels_ids):
-            min_len = min(len(input_ids), len(labels_ids))
+        # Đồng bộ độ dài do token đặc biệt bos/eos
+        if len(input_ids) != len(marked_labels_ids):
+            min_len = min(len(input_ids), len(marked_labels_ids))
             input_ids = input_ids[:min_len]
             attention_mask = attention_mask[:min_len]
-            labels_ids = labels_ids[:min_len]
+            marked_labels_ids = marked_labels_ids[:min_len]
 
         # 3. Padding hoặc Truncate về max_len=256
         pad_len = self.max_len - len(input_ids)
         if pad_len > 0:
             input_ids += [self.tokenizer.pad_token_id] * pad_len
             attention_mask += [0] * pad_len
-            labels_ids += [-100] * pad_len
+            marked_labels_ids += [-100] * pad_len
         else:
             input_ids = input_ids[:self.max_len]
             attention_mask = attention_mask[:self.max_len]
-            labels_ids = labels_ids[:self.max_len]
+            marked_labels_ids = marked_labels_ids[:self.max_len]
 
         return {
             "input_ids": torch.tensor(input_ids, dtype=torch.long),
             "attention_mask": torch.tensor(attention_mask, dtype=torch.long),
-            "labels": torch.tensor(labels_ids, dtype=torch.long)
+            "labels": torch.tensor(marked_labels_ids, dtype=torch.long)
         }
         
 def compute_metrics(p, id2label):
