@@ -146,7 +146,7 @@ def main():
     )
 
     training_args = TrainingArguments(
-        output_dir="./results",
+        # output_dir="./results",
         num_train_epochs=5,
         per_device_train_batch_size=8,
         per_device_eval_batch_size=8,

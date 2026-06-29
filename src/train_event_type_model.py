@@ -173,7 +173,7 @@ def main():
 
     # Thiết lập siêu tham số tối ưu cho không gian 34 nhãn
     training_args = TrainingArguments(
-        output_dir="./results_event_type",
+        # output_dir="./results_event_type",
         num_train_epochs=5,
         per_device_train_batch_size=16, 
         per_device_eval_batch_size=16,
