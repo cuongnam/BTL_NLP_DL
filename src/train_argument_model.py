@@ -100,44 +100,59 @@ class BKEEArgumentDataset(torch.utils.data.Dataset):
         pieces = item["pieces"]
         token_lens = item["token_lens"]
         labels = item["argument_labels"]
+        
+        # Lấy thông tin vị trí từ kích hoạt gốc ban đầu
+        trigger_info = item.get("trigger", {})
+        trigger_start = trigger_info.get("start", -1)
+        trigger_end = trigger_info.get("end", -1)
 
         # Làm sạch ký tự đặc biệt "▁"
         cleaned_pieces = [p.replace("▁", "") for p in pieces]
 
-        # 1. Mã hóa chuỗi subword thành ID kèm <s> và </s>
+        # 1. Mã hóa chuỗi subword thành ID kèm token đặc biệt <s> và </s>
         input_ids = [self.tokenizer.bos_token_id] + self.tokenizer.convert_tokens_to_ids(cleaned_pieces) + [self.tokenizer.eos_token_id]
         attention_mask = [1] * len(input_ids)
 
-        # 2. Căn chỉnh nhãn Subword Alignment có tính đến Marker <tg> và </tg>
-        labels_ids = [-100]  # Đầu <s> nhận -100
+        # 2. Căn chỉnh nhãn Subword Alignment bằng cách theo dõi index từ gốc
+        labels_ids = [-100]  # Đầu câu <s> nhận -100
         
-        # Biến đếm index chạy riêng cho mảng argument_labels gốc để tránh bị lệch index do Marker
         original_word_idx = 0 
         
-        for p_idx, length in enumerate(token_lens):
-            # Lấy token dạng chuỗi hiện tại để kiểm tra xem có phải Marker không
-            current_piece = pieces[p_idx] if p_idx < len(pieces) else ""
+        # Sử dụng biến cờ để xác định xem marker đã xuất hiện hay chưa dựa trên logic nạp của file preprocess
+        for length in token_lens:
             
-            # Nếu gặp token marker, gán ngay nhãn -100 để bỏ qua (Không tính loss)
-            if "<tg>" in current_piece or "</tg>" in current_piece:
+            # KIỂM TRA ĐIỀU KIỆN RANH GIỚI:
+            # Nếu original_word_idx đã chạy hết mảng nhãn gốc, mọi token dôi ra phía sau đều là marker hoặc ký tự đặc biệt bổ sung
+            if original_word_idx >= len(labels):
                 for _ in range(length):
                     labels_ids.append(-100)
+                continue
+                
+            # Kiểm tra xem từ hiện tại có phải là marker dựa trên vị trí từ thực tế
+            # File preprocess chèn <tg> ngay TẠI vị trí trigger_start, và chèn </tg> SAU vị trí (trigger_end - 1)
+            # Nhận diện marker vì độ dài token_lens của marker luôn bằng 1 và không khớp với vị trí từ thông thường.
+            
+            # Logic phòng vệ chuẩn: Nếu độ dài là 1 và vị trí lặp hiện tại tương ứng với điểm chèn marker
+            if length == 1 and (original_word_idx == trigger_start or original_word_idx == trigger_end):
+                # Đây là token marker đặc biệt (<tg> hoặc </tg>), gán nhãn -100 (Bỏ qua không tính loss)
+                labels_ids.append(-100)
+                # KHÔNG tăng original_word_idx vì đây không phải từ gốc trong câu
             else:
-                # Nếu là từ bình thường, lấy nhãn từ mảng labels gốc dựa trên original_word_idx
+                # Đây là từ nội dung gốc trong câu văn
                 word_label = labels[original_word_idx]
                 label_id = self.label2id.get(word_label, self.label2id.get("O", 0))
                 
-                # Gán nhãn cho subword đầu tiên của từ gốc
+                # Gán nhãn thực tế cho subword đầu tiên của từ
                 labels_ids.append(label_id)
                 
-                # Gán -100 cho các subword phía sau của từ đó
+                # Gán nhãn -100 cho các subwords thừa (nếu từ bị phân rã thành nhiều mảnh nhỏ)
                 for _ in range(length - 1):
                     labels_ids.append(-100)
                 
-                # Chỉ tăng index từ gốc khi xử lý xong một từ thực tế (không phải marker)
+                # Hoàn thành 1 từ gốc thành công -> tăng index để chuyển sang từ tiếp theo
                 original_word_idx += 1
 
-        labels_ids.append(-100)  # Cuối </s> nhận -100
+        labels_ids.append(-100)  # Cuối câu </s> nhận -100
 
         # Phòng vệ lệch độ dài mảng cấu trúc dữ liệu do rút gọn
         if len(input_ids) != len(labels_ids):
