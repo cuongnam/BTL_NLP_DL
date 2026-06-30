@@ -300,32 +300,38 @@ class BKEEEventPipeline:
 if __name__ == "__main__":
     pipeline = BKEEEventPipeline()
     
-    # Văn bản tin tức giả định đã được tiền xử lý token
-    sample_news = "Hôm_qua , Công_an thành_phố Hà_Nội đã khởi_tố đối_tượng Nguyễn_Văn_A về hành_vi lừa_đảo chiếm_đoạt tài_sản ."
+    # Định nghĩa danh sách câu test sát với miền dữ liệu Doanh nghiệp của BKEE
+    test_sentences = [
+        # Câu doanh nghiệp 1: Sự kiện bổ nhiệm nhân sự
+        "Ngày 15/6 , Hội_đồng_quản_trị tập_đoàn VinGroup đã bổ_nhiệm ông Nguyễn_Văn_B làm Tổng_giám_đốc mới .",
+        
+        # Câu doanh nghiệp 2: Sự kiện đầu tư / mua bán sáp nhập
+        "Công_ty FPT vừa đầu_tư 50 triệu USD vào một doanh_nghiệp công_nghệ tại Mỹ ."
+    ]
+    
     pub_date = "2026-06-30"
+    all_rows = []
     
-    print(f"\n[Test] Văn bản đầu vào: {sample_news}")
-    events = pipeline.extract_events(sample_news, anchor_date=pub_date)
-    
-    # Chuyển đổi cấu trúc thành DataFrame dạng bảng Timeline dữ liệu doanh nghiệp
-    timeline_rows = []
-    for ev in events:
-        args = ev["Các Tham Thể Trích Xuất"]
-        # Thử tìm trường thời gian đã chuẩn hóa, nếu không có lấy ngày đăng bài báo làm mặc định
-        time_display = args.get("Time_Chuẩn_Hóa", args.get("Date_Chuẩn_Hóa", pub_date))
+    for idx, sample_news in enumerate(test_sentences, 1):
+        print(f"\n======================================")
+        print(f"[Test {idx}] Văn bản đầu vào: {sample_news}")
+        print(f"======================================")
         
-        timeline_rows.append({
-            "Mốc Thời Gian": time_display,
-            "Sự Kiện": ev["Loại Sự Kiện"],
-            "Từ Kích Hoạt": ev["Trigger"],
-            "Chi Tiết Tham Thể": json.dumps(args, ensure_ascii=False)
-        })
+        events = pipeline.extract_events(sample_news, anchor_date=pub_date)
         
-    df = pd.DataFrame(timeline_rows)
-    print("\n=== BẢNG TIMELINE SỰ KIỆN DOANH NGHIỆP TRÍCH XUẤT THÀNH CÔNG ===")
-    print(df.to_string(index=False))
-    
-    # Lưu ra file CSV mẫu
-    output_csv = ROOT_DIR / "data" / "timeline_examples.csv"
-    df.to_csv(output_csv, index=False, encoding="utf8")
-    print(f"\n[Thành công] Đã xuất bảng dòng thời gian ra file: {output_csv}")
+        for ev in events:
+            args = ev["Các Tham Thể Trích Xuất"]
+            time_display = args.get("Time_Chuẩn_Hóa", args.get("Date_Chuẩn_Hóa", pub_date))
+            all_rows.append({
+                "Mốc Thời Gian": time_display,
+                "Sự Kiện": ev["Loại Sự Kiện"],
+                "Từ Kích Hoạt": ev["Trigger"],
+                "Chi Tiết Tham Thể": json.dumps(args, ensure_ascii=False)
+            })
+        
+    df = pd.DataFrame(all_rows)
+    print("\n\n=== BẢNG TIMELINE SỰ KIỆN DOANH NGHIỆP TRÍCH XUẤT THÀNH CÔNG ===")
+    if not df.empty:
+        print(df.to_string(index=False))
+    else:
+        print("🚨 Bảng vẫn trống. Lý do: Mô hình ONNX lượng tử hóa của bạn có thể đã bị triệt tiêu trọng số quá mức trong chặng nén INT8, hoặc câu test vẫn chưa trúng từ khóa trong tập train của bạn.")
