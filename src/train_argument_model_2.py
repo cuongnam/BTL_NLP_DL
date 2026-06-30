@@ -203,7 +203,7 @@
 # if __name__ == "__main__":
 #     main()
 """
-train_argument_model.py
+train_argument_model_2.py
 
 Fine-tuning XLM-RoBERTa cho bài toán Argument Extraction với thẻ mồi
 tích hợp kỹ thuật Quantization-Aware Training (QAT) INT8.
@@ -212,7 +212,7 @@ tích hợp kỹ thuật Quantization-Aware Training (QAT) INT8.
 from pathlib import Path
 import json
 import torch
-import torch.ao.quantization as quantization
+import torch.ao.quantization as quantization  # Thư viện QAT PyTorch FX
 import numpy as np
 import wandb
 from transformers import AutoTokenizer, AutoModelForTokenClassification, TrainingArguments, Trainer
@@ -230,7 +230,7 @@ class BKEEArgumentDataset(torch.utils.data.Dataset):
         self.label2id = label2id
         self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
         
-        # ĐĂNG KÝ TOKEN ĐẶC BIỆT: Đảm bảo XLM-R Tokenizer hiểu thẻ marker kích hoạt
+        # ĐĂNG KÝ TOKEN ĐẶC BIỆT: Yêu cầu Tokenizer hiểu thẻ marker kích hoạt trigger
         self.tokenizer.add_tokens(["<tg>", "</tg>"], special_tokens=True)
         self.max_len = max_len
 
@@ -240,11 +240,10 @@ class BKEEArgumentDataset(torch.utils.data.Dataset):
     def __getitem__(self, idx):
         item = self.data[idx]
         
-        # Sử dụng mảng từ gốc "tokens" khớp với số lượng của "argument_labels"
+        # SỬA LỖI KEYERROR: Sử dụng mảng từ gốc "tokens" khớp với số lượng phần tử của "argument_labels"
         words = item["tokens"]
         labels = item["argument_labels"]
 
-        # Tokenizer tiến hành băm từ (nhận prefix khoảng trắng tự động)
         encoding = self.tokenizer(
             words,
             is_split_into_words=True,
@@ -281,9 +280,9 @@ def compute_metrics(p, id2label):
     ]
 
     return {
-        "precision": precision_score(true_labels, true_predictions),
-        "recall": recall_score(true_labels, true_predictions),
-        "f1": f1_score(true_labels, true_predictions)
+        "precision": precision_score(true_labels, true_predictions, zero_division=0),
+        "recall": recall_score(true_labels, true_predictions, zero_division=0),
+        "f1": f1_score(true_labels, true_predictions, zero_division=0)
     }
 
 def main():
@@ -301,7 +300,7 @@ def main():
         num_labels=len(label2id)
     )
     
-    # Đồng bộ cấu hình từ vựng có thẻ mồi <tg> cho XLM-R
+    # Đồng bộ cấu hình từ vựng có chứa thẻ mồi cho ma trận embedding XLM-R
     model.resize_token_embeddings(len(train_dataset.tokenizer))
 
     # ========================================================
@@ -309,9 +308,23 @@ def main():
     # ========================================================
     print("--- [QAT] Cấu hình mô hình sang trạng thái Nhận thức Lượng tử hóa ---")
     model.train()
-    # ĐỔI THÀNH QCONFIG
-    model.qconfig = quantization.get_default_qat_qconfig('fbgemm')
+    
+    # 1. Định nghĩa cấu hình QAT mặc định cho các lớp Tuyến tính (Linear layers)
+    qconfig_linear = quantization.get_default_qat_qconfig('fbgemm')
+    model.qconfig = qconfig_linear
+    
+    # 2. SỬA LỖI ASSERTIONERROR: Định nghĩa cấu hình QAT đặc thù dành riêng cho lớp nhúng (Embedding)
+    qconfig_embedding = quantization.float_qparams_weight_only_qconfig
+    
+    # Duyệt qua cây cấu trúc đồ thị mạng để ép kiểu riêng cho mọi lớp Embedding của XLM-RoBERTa
+    for name, module in model.named_modules():
+        if isinstance(module, torch.nn.Embedding):
+            module.qconfig = qconfig_embedding
+            print(f"-> Đã áp dụng qconfig bảo vệ thành công cho lớp Embedding: {name}")
+
+    # 3. Chuẩn bị mạng đồ thị, chèn các nút FakeQuantize nhạy cảm vào mô hình
     model = quantization.prepare_qat(model, inplace=True)
+    print("--- [QAT] Khởi tạo phân cấp Fake Quantization Nodes thành công! ---")
 
     training_args = TrainingArguments(
         output_dir=(ROOT_DIR / "models" / "best_xlmr_argument").as_posix(),
@@ -321,7 +334,7 @@ def main():
         learning_rate=2e-5,             
         warmup_steps=100,
         weight_decay=0.01,
-        logging_dir="./logs_argument_xlmr",
+        TENSORBOARD_LOGGING_DIR="./logs_argument_xlmr",  # Đã sửa đổi theo chuẩn v5.2 tránh cảnh báo
         logging_steps=10,
         eval_strategy="epoch",        
         save_strategy="epoch",
@@ -342,15 +355,17 @@ def main():
     trainer.train()
     
     # ========================================================
-    # CHUYỂN ĐỔI (CONVERT) SANG MÔ HÌNH INT8 SAU TRAIN
+    # CHUYỂN ĐỔI (CONVERT) SANG MÔ HÌNH INT8 THỰC TẾ SAU TRAIN
     # ========================================================
     print("--- [QAT] Đang convert đóng gói đồ thị sang INT8 thực thụ ---")
     model.eval()
-    model.to('cpu')
+    model.to('cpu')  # Việc convert ép kiểu toán tử số học cần được chạy trên CPU để ổn định đồ thị
     quantized_model = quantization.convert(model, inplace=False)
 
     output_dir = ROOT_DIR / "models" / "best_xlmr_argument"
     output_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Lưu file nén QAT INT8 siêu nhẹ
     torch.save(quantized_model.state_dict(), output_dir / "pytorch_model_qat_int8.pt")
     train_dataset.tokenizer.save_pretrained(output_dir)
     print("🎉 Hoàn thành lưu mô hình Argument QAT thành công!")
