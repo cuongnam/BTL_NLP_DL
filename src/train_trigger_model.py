@@ -284,14 +284,28 @@ def main():
     )
 
     # ========================================================
+    # ========================================================
     # KÍCH HOẠT CONFIG QUANTIZATION-AWARE TRAINING (QAT)
     # ========================================================
     print("--- [QAT] Cấu hình mô hình sang trạng thái Nhận thức Lượng tử hóa ---")
     model.train()
-    # fbgemm tối ưu cho cấu trúc x86 CPU khi chạy suy luận thực tế
-    model.qconfig = quantization.get_default_qat_qconfig('fbgemm')
-    # Chuẩn bị mạng đồ thị, chèn FakeQuantize vào các lớp Linear/Conv
+    
+    # 1. Áp dụng cấu hình mặc định cho các lớp tuyến tính
+    qconfig_linear = quantization.get_default_qat_qconfig('fbgemm')
+    model.qconfig = qconfig_linear
+    
+    # 2. Định nghĩa cấu hình QAT bảo vệ riêng cho lớp nhúng Embedding
+    qconfig_embedding = quantization.float_qparams_weight_only_qconfig
+    
+    # Duyệt qua các modules để gán cấu hình riêng cho Embedding của PhoBERT
+    for name, module in model.named_modules():
+        if isinstance(module, torch.nn.Embedding):
+            module.qconfig = qconfig_embedding
+            print(f"-> Đã áp dụng qconfig bảo vệ thành công cho lớp Embedding: {name}")
+
+    # 3. Chuẩn bị mạng đồ thị FakeQuantize
     model = quantization.prepare_qat(model, inplace=True)
+    print("--- [QAT] Khởi tạo phân cấp Fake Quantization Nodes thành công! ---")
 
     training_args = TrainingArguments(
         output_dir=(ROOT_DIR / "models" / "best_phobert_trigger").as_posix(),

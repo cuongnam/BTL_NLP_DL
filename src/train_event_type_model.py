@@ -328,13 +328,27 @@ def main():
     )
 
     # ========================================================
+    # ========================================================
     # KÍCH HOẠT CONFIG QUANTIZATION-AWARE TRAINING (QAT)
     # ========================================================
     print("--- [QAT] Cấu hình mô hình sang trạng thái Nhận thức Lượng tử hóa ---")
     model.train()
-    # ĐỔI THÀNH QCONFIG
-    model.qconfig = quantization.get_default_qat_qconfig('fbgemm')
+    
+    # 1. Cấu hình lớp Tuyến tính
+    qconfig_linear = quantization.get_default_qat_qconfig('fbgemm')
+    model.qconfig = qconfig_linear
+    
+    # 2. Cấu hình lớp Embedding nhằm tránh lỗi AssertionError khi convert
+    qconfig_embedding = quantization.float_qparams_weight_only_qconfig
+    
+    for name, module in model.named_modules():
+        if isinstance(module, torch.nn.Embedding):
+            module.qconfig = qconfig_embedding
+            print(f"-> Đã áp dụng qconfig bảo vệ thành công cho lớp Embedding: {name}")
+
+    # 3. Khởi tạo Fake Quantization
     model = quantization.prepare_qat(model, inplace=True)
+    print("--- [QAT] Khởi tạo phân cấp Fake Quantization Nodes thành công! ---")
 
     training_args = TrainingArguments(
         output_dir=(ROOT_DIR / "models" / "best_phobert_event_type").as_posix(),
