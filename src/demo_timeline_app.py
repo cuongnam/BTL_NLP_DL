@@ -10,7 +10,8 @@ import pandas as pd
 import plotly.express as px
 import json
 from datetime import datetime
-from timeline_generator import BKEEEventPipeline
+# CODE MỚI ĐÃ ĐỒNG BỘ
+from timeline_generator import BKEEEventPyTorchPipeline as BKEEEventPipeline
 
 # 1. Cấu hình trang Streamlit diện mạo hiện đại
 st.set_page_config(page_title="BKEE - Event Extraction Demo", layout="wide", page_icon="📝")
