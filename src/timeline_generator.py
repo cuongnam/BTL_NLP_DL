@@ -12,6 +12,7 @@ import pandas as pd
 import onnxruntime as ort
 from transformers import AutoTokenizer
 from time_normalizer import normalize_vietnamese_time
+from transformers import RobertaTokenizerFast
 
 # Cấu hình đường dẫn hệ thống
 ROOT_DIR = Path(__file__).resolve().parent.parent
@@ -29,8 +30,10 @@ class BKEEEventPipeline:
         self.event_id2label = {int(k): v for k, v in maps["event_type"]["id2label"].items()}
         self.argument_id2label = {int(k): v for k, v in maps["argument"]["id2label"].items()}
         
-        # 2. Khởi tạo các bộ Tokenizer gốc
-        self.phobert_tok = AutoTokenizer.from_pretrained("vinai/phobert-base")
+        # Ép hệ thống nạp phiên bản RobertaTokenizerFast cấu hình theo PhoBERT để hỗ trợ hàm word_ids()
+        self.phobert_tok = RobertaTokenizerFast.from_pretrained("vinai/phobert-base")
+
+        # XLM-RoBERTa mặc định đã hỗ trợ Fast Tokenizer nên giữ nguyên
         self.xlmr_tok = AutoTokenizer.from_pretrained("xlm-roberta-base")
         self.xlmr_tok.add_special_tokens({'additional_special_tokens': ['<tg>', '</tg>']})
 
