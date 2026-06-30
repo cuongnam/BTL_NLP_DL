@@ -304,7 +304,8 @@ def main():
     # ========================================================
     print("--- [QAT] Cấu hình mô hình sang trạng thái Nhận thức Lượng tử hóa ---")
     model.train()
-    model.qconfig = quantization.get_default_qat_config('fbgemm')
+    # ĐỔI THÀNH QCONFIG
+    model.qconfig = quantization.get_default_qat_qconfig('fbgemm')
     model = quantization.prepare_qat(model, inplace=True)
 
     training_args = TrainingArguments(

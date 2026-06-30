@@ -282,7 +282,7 @@ def main():
     print("--- [QAT] Cấu hình mô hình sang trạng thái Nhận thức Lượng tử hóa ---")
     model.train()
     # fbgemm tối ưu cho cấu trúc x86 CPU khi chạy suy luận thực tế
-    model.qconfig = quantization.get_default_qat_config('fbgemm')
+    model.qconfig = quantization.get_default_qat_qconfig('fbgemm')
     # Chuẩn bị mạng đồ thị, chèn FakeQuantize vào các lớp Linear/Conv
     model = quantization.prepare_qat(model, inplace=True)
 
