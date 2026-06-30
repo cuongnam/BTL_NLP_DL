@@ -248,7 +248,16 @@ class BKEEEventTypeDataset(torch.utils.data.Dataset):
     def __getitem__(self, idx):
         item = self.data[idx]
         words = item["tokens"]
-        labels = item["labels"]
+        
+        # Khởi tạo danh sách nhãn nền "O"
+        labels = ["O"] * len(words)
+        
+        # Đọc từ trường trigger.start và event_type của data thực tế chặng Event
+        if "trigger" in item and "event_type" in item:
+            start_idx = item["trigger"]["start"]
+            event_str = item["event_type"]
+            if start_idx < len(labels):
+                labels[start_idx] = event_str
 
         encoding = self.tokenizer(
             words,

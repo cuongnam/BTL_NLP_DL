@@ -218,7 +218,9 @@ class BKEETriggerDataset(torch.utils.data.Dataset):
     def __getitem__(self, idx):
         item = self.data[idx]
         words = item["tokens"]
-        labels = item["labels"]
+        
+        # Trỏ đích xác vào key trigger_labels theo mẫu data thực tế của bạn
+        labels = item["trigger_labels"]
 
         encoding = self.tokenizer(
             words,

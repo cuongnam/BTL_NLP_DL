@@ -230,6 +230,7 @@ class BKEEArgumentDataset(torch.utils.data.Dataset):
         self.label2id = label2id
         self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
         
+        # ĐĂNG KÝ TOKEN ĐẶC BIỆT: Đảm bảo XLM-R Tokenizer hiểu thẻ marker kích hoạt
         self.tokenizer.add_tokens(["<tg>", "</tg>"], special_tokens=True)
         self.max_len = max_len
 
@@ -238,9 +239,12 @@ class BKEEArgumentDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, idx):
         item = self.data[idx]
-        words = item["marked_tokens"]
+        
+        # Sử dụng mảng từ gốc "tokens" khớp với số lượng của "argument_labels"
+        words = item["tokens"]
         labels = item["argument_labels"]
 
+        # Tokenizer tiến hành băm từ (nhận prefix khoảng trắng tự động)
         encoding = self.tokenizer(
             words,
             is_split_into_words=True,
@@ -254,6 +258,7 @@ class BKEEArgumentDataset(torch.utils.data.Dataset):
         label_ids = []
         for word_idx in word_ids:
             if word_idx is None:
+                # Gán nhãn bỏ qua cho các token đặc biệt ([CLS], [SEP], padding)
                 label_ids.append(-100)
             else:
                 label_str = labels[word_idx]
