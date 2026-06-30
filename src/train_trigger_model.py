@@ -198,6 +198,7 @@ import wandb
 from transformers import AutoTokenizer, AutoModelForTokenClassification, TrainingArguments, Trainer
 from transformers import DataCollatorForTokenClassification
 from seqeval.metrics import classification_report, f1_score, precision_score, recall_score
+from transformers import RobertaTokenizerFast
 
 # Cấu hình đường dẫn
 ROOT_DIR = Path(__file__).resolve().parent.parent
@@ -209,7 +210,8 @@ class BKEETriggerDataset(torch.utils.data.Dataset):
         with open(data_path, "r", encoding="utf8") as f:
             self.data = json.load(f)
         self.label2id = label2id
-        self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
+        # SỬA DÒNG NÀY: Chuyển sang sử dụng Fast Tokenizer
+        self.tokenizer = RobertaTokenizerFast.from_pretrained(tokenizer_name)
         self.max_len = max_len
 
     def __len__(self):

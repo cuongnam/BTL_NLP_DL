@@ -225,6 +225,9 @@ import wandb
 from transformers import AutoTokenizer, AutoModelForTokenClassification, TrainingArguments, Trainer
 from transformers import DataCollatorForTokenClassification
 from seqeval.metrics import classification_report, f1_score, precision_score, recall_score
+# THÊM IMPORT NÀY Ở ĐẦU FILE
+from transformers import RobertaTokenizerFast
+
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = ROOT_DIR / "data" / "preprocessed" / "event_type"
@@ -232,14 +235,15 @@ LABEL_MAP_PATH = ROOT_DIR / "data" / "preprocessed" / "label_maps.json"
 
 class BKEEEventTypeDataset(torch.utils.data.Dataset):
     def __init__(self, data_path, label2id, tokenizer_name="vinai/phobert-base", max_len=256):
-        with open(data_path, "r", encoding="utf8") as f:
+        with open(data_path, "r", encoding="utf8") as f:    
             self.data = json.load(f)
         
         self.label2id = label2id.copy()
         if "O" not in self.label2id:
             self.label2id["O"] = 33
 
-        self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
+        # SỬA DÒNG NÀY: Ép buộc sử dụng phiên bản Fast để có hàm word_ids()
+        self.tokenizer = RobertaTokenizerFast.from_pretrained(tokenizer_name)
         self.max_len = max_len
 
     def __len__(self):
