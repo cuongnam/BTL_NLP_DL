@@ -243,7 +243,11 @@ class BKEEEventTypeDataset(torch.utils.data.Dataset):
             self.label2id["O"] = 33
 
         # SỬA DÒNG NÀY: Ép buộc sử dụng phiên bản Fast để có hàm word_ids()
-        self.tokenizer = RobertaTokenizerFast.from_pretrained(tokenizer_name)
+        # SỬA DÒNG NÀY: Bổ sung tham số add_prefix_space=True
+        self.tokenizer = RobertaTokenizerFast.from_pretrained(
+            tokenizer_name, 
+            add_prefix_space=True
+        )
         self.max_len = max_len
 
     def __len__(self):

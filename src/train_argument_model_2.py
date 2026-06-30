@@ -334,7 +334,7 @@ def main():
         learning_rate=2e-5,             
         warmup_steps=100,
         weight_decay=0.01,
-        TENSORBOARD_LOGGING_DIR="./logs_argument_xlmr",  # Đã sửa đổi theo chuẩn v5.2 tránh cảnh báo
+        logging_dir="./logs_argument_xlmr",  # Đã sửa đổi theo chuẩn v5.2 tránh cảnh báo
         logging_steps=10,
         eval_strategy="epoch",        
         save_strategy="epoch",

@@ -210,8 +210,11 @@ class BKEETriggerDataset(torch.utils.data.Dataset):
         with open(data_path, "r", encoding="utf8") as f:
             self.data = json.load(f)
         self.label2id = label2id
-        # SỬA DÒNG NÀY: Chuyển sang sử dụng Fast Tokenizer
-        self.tokenizer = RobertaTokenizerFast.from_pretrained(tokenizer_name)
+        # SỬA DÒNG NÀY: Bổ sung tham số add_prefix_space=True
+        self.tokenizer = RobertaTokenizerFast.from_pretrained(
+            tokenizer_name, 
+            add_prefix_space=True
+        )
         self.max_len = max_len
 
     def __len__(self):
