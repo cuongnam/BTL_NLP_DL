@@ -31,10 +31,11 @@ class BKEEEventPipeline:
         self.argument_id2label = {int(k): v for k, v in maps["argument"]["id2label"].items()}
         
         # Ép hệ thống nạp phiên bản RobertaTokenizerFast cấu hình theo PhoBERT để hỗ trợ hàm word_ids()
-        self.phobert_tok = RobertaTokenizerFast.from_pretrained("vinai/phobert-base")
+        # THÊM THAM SỐ add_prefix_space=True để xử lý dữ liệu dạng mảng từ (is_split_into_words)
+        self.phobert_tok = RobertaTokenizerFast.from_pretrained("vinai/phobert-base", add_prefix_space=True)
 
         # XLM-RoBERTa mặc định đã hỗ trợ Fast Tokenizer nên giữ nguyên
-        self.xlmr_tok = AutoTokenizer.from_pretrained("xlm-roberta-base")
+        self.xlmr_tok = AutoTokenizer.from_pretrained("xlm-roberta-base", add_prefix_space=True)
         self.xlmr_tok.add_special_tokens({'additional_special_tokens': ['<tg>', '</tg>']})
 
         print("[Pipeline] Đang khởi tạo các phiên Session ONNX Runtime INT8...")
