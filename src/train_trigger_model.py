@@ -252,19 +252,33 @@ def compute_metrics(p, id2label):
     predictions, labels = p
     predictions = np.argmax(predictions, axis=2)
 
-    true_predictions = [
-        [id2label[p_id] for (p_id, l_id) in zip(prediction, label) if l_id != -100]
-        for prediction, label in zip(predictions, labels)
-    ]
-    true_labels = [
-        [id2label[l_id] for (p_id, l_id) in zip(prediction, label) if l_id != -100]
-        for prediction, label in zip(predictions, labels)
-    ]
+    true_predictions = []
+    true_labels = []
+
+    for prediction, label in zip(predictions, labels):
+        pred_list = []
+        label_list = []
+        for p_id, l_id in zip(prediction, label):
+            if l_id != -100:  # Bỏ qua các token đặc biệt ([CLS], [SEP], padding)
+                # Chuyển đổi ID sang String để khớp chính xác với key từ file JSON bản đồ nhãn
+                p_str = str(p_id)
+                l_str = str(l_id)
+                
+                pred_list.append(id2label.get(p_str, "O"))
+                label_list.append(id2label.get(l_str, "O"))
+                
+        true_predictions.append(pred_list)
+        true_labels.append(label_list)
+
+    # Tính toán chính xác thông số F1, Precision, Recall cho chuỗi BIO
+    p_score = precision_score(true_labels, true_predictions, zero_division=0)
+    r_score = recall_score(true_labels, true_predictions, zero_division=0)
+    f1 = f1_score(true_labels, true_predictions, zero_division=0)
 
     return {
-        "precision": precision_score(true_labels, true_predictions),
-        "recall": recall_score(true_labels, true_predictions),
-        "f1": f1_score(true_labels, true_predictions)
+        "precision": p_score,
+        "recall": r_score,
+        "f1": f1
     }
 
 def main():
