@@ -286,7 +286,7 @@ def main():
         maps = json.load(f)
     trigger_maps = maps["trigger"]
     label2id = trigger_maps["label2id"]
-    id2label = {int(k): v for k, v in trigger_maps["id2label"].items()}
+    id2label = {str(k): v for k, v in trigger_maps["id2label"].items()}
 
     train_dataset = BKEETriggerDataset(DATA_DIR / "train.json", label2id)
     dev_dataset = BKEETriggerDataset(DATA_DIR / "dev.json", label2id)

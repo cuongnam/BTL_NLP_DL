@@ -316,8 +316,8 @@ def main():
     if "O" not in label2id:
         label2id["O"] = 33
         
-    id2label = {int(k): v for k, v in event_maps["id2label"].items()}
-    id2label[33] = "O"
+    id2label = {str(k): v for k, v in event_maps["id2label"].items()}
+    id2label["33"] = "O"
 
     train_dataset = BKEEEventTypeDataset(DATA_DIR / "train.json", label2id)
     dev_dataset = BKEEEventTypeDataset(DATA_DIR / "dev.json", label2id)
