@@ -180,6 +180,20 @@ class BKEEEventPipeline:
         trigger_logits = self._predict_onnx(self.sess_trigger, [encoded_phobert["input_ids"]], [encoded_phobert["attention_mask"]])
         trigger_preds = np.argmax(trigger_logits, axis=-1)
 
+        # === ĐOẠN CODE DEBUG THÊM VÀO ===
+        print("\n--- [DEBUG CHẶNG 1] ---")
+        print(f"Bản đồ nhãn Trigger hiện tại (id2label): {self.trigger_id2label}")
+        print("Mô hình đang dự đoán các từ thành các nhãn sau:")
+        word_ids = encoded_phobert.word_ids()
+        for idx, word_idx in enumerate(word_ids):
+            if word_idx is None or word_idx >= len(words):
+                continue
+            pred_id = trigger_preds[idx]
+            label = self.trigger_id2label.get(pred_id, "KHÔNG_TÌM_THẤY_ID")
+            print(f"Từ: '{words[word_idx]}' -> ID dự đoán: {pred_id} -> Tên nhãn: {label}")
+        print("-----------------------\n")
+        # ================================
+
         word_ids = encoded_phobert.word_ids()
         detected_triggers = []
 
