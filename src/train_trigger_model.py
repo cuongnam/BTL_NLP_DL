@@ -290,7 +290,8 @@ def main():
 
     train_dataset = BKEETriggerDataset(DATA_DIR / "train.json", label2id)
     dev_dataset = BKEETriggerDataset(DATA_DIR / "dev.json", label2id)
-
+    # THÊM DÒNG NÀY: Khởi tạo tập kiểm thử độc lập
+    # test_dataset = BKEETriggerDataset(DATA_DIR / "test.json", label2id)
     # 1. Khởi tạo mô hình nền gốc FP32
     model = AutoModelForTokenClassification.from_pretrained(
         "vinai/phobert-base", 
@@ -349,6 +350,15 @@ def main():
     wandb.init(project="bkee-event-extraction", name="run_phobert_trigger_qat")
     trainer.train()
     
+    # print("\n--- [ĐÁNH GIÁ] Đang quét qua tập dữ liệu TEST.JSON khách quan ---")
+    # test_metrics = trainer.evaluate(eval_dataset=test_dataset, metric_key_prefix="test")
+    # print("\n📊 KẾT QUẢ ĐÁNH GIÁ TRÊN TẬP TEST CHUẨN:")
+    # print(f" -> Test Loss:      {test_metrics.get('test_loss', 'N/A')}")
+    # print(f" -> Test Precision: {test_metrics.get('test_precision', 'N/A')}")
+    # print(f" -> Test Recall:    {test_metrics.get('test_recall', 'N/A')}")
+    # print(f" -> Test F1-Score:  {test_metrics.get('test_f1', 'N/A')}")
+    # print("-" * 50)
+
     # ========================================================
     # CHUYỂN ĐỔI (CONVERT) SANG MÔ HÌNH INT8 THỰC TẾ SAU TRAIN
     # ========================================================

@@ -352,11 +352,11 @@ def main():
 
     training_args = TrainingArguments(
         output_dir=(ROOT_DIR / "models" / "best_phobert_event_type").as_posix(),
-        num_train_epochs=5,
+        num_train_epochs=10,              # Tăng lên 10 epochs để vượt qua nhiễu QAT
         per_device_train_batch_size=16, 
         per_device_eval_batch_size=16,
-        learning_rate=2e-5,             
-        warmup_steps=100,
+        learning_rate=5e-5,               # Tăng cường tốc độ học lên 5e-5
+        warmup_ratio=0.1,                 # Dùng tỉ lệ khởi động 10% thay cho steps cứng
         weight_decay=0.01,
         logging_dir="./logs_event_type",
         logging_steps=10,
