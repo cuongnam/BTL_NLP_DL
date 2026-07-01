@@ -224,7 +224,9 @@ import numpy as np
 import wandb
 from transformers import AutoTokenizer, AutoModelForTokenClassification, TrainingArguments, Trainer
 from transformers import DataCollatorForTokenClassification
-from seqeval.metrics import classification_report, f1_score, precision_score, recall_score
+# from seqeval.metrics import classification_report, f1_score, precision_score, recall_score
+# THÊM DÒNG NÀY VÀO THAY THẾ:
+from sklearn.metrics import precision_recall_fscore_support
 # THÊM IMPORT NÀY Ở ĐẦU FILE
 from transformers import RobertaTokenizerFast
 
@@ -288,32 +290,67 @@ class BKEEEventTypeDataset(torch.utils.data.Dataset):
         encoding["labels"] = label_ids
         return {k: torch.tensor(v) for k, v in encoding.items()}
 
+# def compute_metrics(p, id2label):
+#     predictions, labels = p
+#     predictions = np.argmax(predictions, axis=2)
+
+#     true_predictions = []
+#     true_labels = []
+
+#     for prediction, label in zip(predictions, labels):
+#         pred_list = []
+#         label_list = []
+#         for p_id, l_id in zip(prediction, label):
+#             if l_id != -100:  # Bỏ qua các token đặc biệt ([CLS], [SEP], padding)
+#                 # ÉP KIỂU SANG STR: Để khớp chính xác với Key dạng chuỗi trong id2label
+#                 p_str = str(p_id)
+#                 l_str = str(l_id)
+                
+#                 pred_list.append(id2label.get(p_str, "O"))
+#                 label_list.append(id2label.get(l_str, "O"))
+                
+#         true_predictions.append(pred_list)
+#         true_labels.append(label_list)
+
+#     return {
+#         "precision": precision_score(true_labels, true_predictions, zero_division=0),
+#         "recall": recall_score(true_labels, true_predictions, zero_division=0),
+#         "f1": f1_score(true_labels, true_predictions, zero_division=0)
+#     }
 def compute_metrics(p, id2label):
     predictions, labels = p
     predictions = np.argmax(predictions, axis=2)
 
-    true_predictions = []
-    true_labels = []
+    # Làm phẳng mảng và lọc bỏ các token đặc biệt (-100)
+    flat_predictions = []
+    flat_labels = []
 
     for prediction, label in zip(predictions, labels):
-        pred_list = []
-        label_list = []
         for p_id, l_id in zip(prediction, label):
-            if l_id != -100:  # Bỏ qua các token đặc biệt ([CLS], [SEP], padding)
-                # ÉP KIỂU SANG STR: Để khớp chính xác với Key dạng chuỗi trong id2label
-                p_str = str(p_id)
-                l_str = str(l_id)
-                
-                pred_list.append(id2label.get(p_str, "O"))
-                label_list.append(id2label.get(l_str, "O"))
-                
-        true_predictions.append(pred_list)
-        true_labels.append(label_list)
+            if l_id != -100:
+                flat_predictions.append(p_id)
+                flat_labels.append(l_id)
+
+    # Chuyển đổi mảng số nguyên sang danh sách nhãn chuỗi tường minh để tính toán
+    true_preds_str = [id2label.get(str(p_id), "O") for p_id in flat_predictions]
+    true_labels_str = [id2label.get(str(l_id), "O") for l_id in flat_labels]
+
+    # Lấy danh sách các nhãn sự kiện thực tế xuất hiện (loại bỏ nhãn nền "O" để tính toán khách quan)
+    unique_labels = list(set(true_labels_str) - {"O"})
+
+    # Tính toán Precision, Recall, F1 đa lớp (Macro Average) dựa trên sklearn
+    precision, recall, f1, _ = precision_recall_fscore_support(
+        true_labels_str, 
+        true_preds_str, 
+        average="macro", 
+        labels=unique_labels,
+        zero_division=0
+    )
 
     return {
-        "precision": precision_score(true_labels, true_predictions, zero_division=0),
-        "recall": recall_score(true_labels, true_predictions, zero_division=0),
-        "f1": f1_score(true_labels, true_predictions, zero_division=0)
+        "precision": precision,
+        "recall": recall,
+        "f1": f1
     }
 
 def main():
