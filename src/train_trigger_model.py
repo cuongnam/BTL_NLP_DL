@@ -323,10 +323,11 @@ def main():
 
     training_args = TrainingArguments(
         output_dir=(ROOT_DIR / "models" / "best_phobert_trigger").as_posix(),
-        num_train_epochs=5,
+        num_train_epochs=10,              # Gợi ý: Tăng lên 10
         per_device_train_batch_size=8,
         per_device_eval_batch_size=8,
-        warmup_steps=100,
+        learning_rate=5e-5,               # Gợi ý: Tăng lên 5e-5 để đẩy Recall
+        warmup_ratio=0.1,                 # Gợi ý: Dùng tỉ lệ thay cho cứng 100 steps
         weight_decay=0.01,
         logging_dir="./logs",
         logging_steps=10,
