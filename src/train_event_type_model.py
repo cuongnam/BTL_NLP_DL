@@ -292,14 +292,23 @@ def compute_metrics(p, id2label):
     predictions, labels = p
     predictions = np.argmax(predictions, axis=2)
 
-    true_predictions = [
-        [id2label.get(p_id, "O") for (p_id, l_id) in zip(prediction, label) if l_id != -100]
-        for prediction, label in zip(predictions, labels)
-    ]
-    true_labels = [
-        [id2label.get(l_id, "O") for (p_id, l_id) in zip(prediction, label) if l_id != -100]
-        for prediction, label in zip(predictions, labels)
-    ]
+    true_predictions = []
+    true_labels = []
+
+    for prediction, label in zip(predictions, labels):
+        pred_list = []
+        label_list = []
+        for p_id, l_id in zip(prediction, label):
+            if l_id != -100:  # Bỏ qua các token đặc biệt ([CLS], [SEP], padding)
+                # ÉP KIỂU SANG STR: Để khớp chính xác với Key dạng chuỗi trong id2label
+                p_str = str(p_id)
+                l_str = str(l_id)
+                
+                pred_list.append(id2label.get(p_str, "O"))
+                label_list.append(id2label.get(l_str, "O"))
+                
+        true_predictions.append(pred_list)
+        true_labels.append(label_list)
 
     return {
         "precision": precision_score(true_labels, true_predictions, zero_division=0),
