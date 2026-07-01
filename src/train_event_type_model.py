@@ -353,26 +353,47 @@ def compute_metrics(p, id2label):
         "f1": f1
     }
 
+# def main():
+#     with open(LABEL_MAP_PATH, "r", encoding="utf8") as f:
+#         maps = json.load(f)
+#     event_maps = maps["event_type"]
+#     label2id = event_maps["label2id"]
+    
+#     if "O" not in label2id:
+#         label2id["O"] = 33
+        
+#     id2label = {str(k): v for k, v in event_maps["id2label"].items()}
+#     id2label["33"] = "O"
+
+#     train_dataset = BKEEEventTypeDataset(DATA_DIR / "train.json", label2id)
+#     dev_dataset = BKEEEventTypeDataset(DATA_DIR / "dev.json", label2id)
+
+#     model = AutoModelForTokenClassification.from_pretrained(
+#         "vinai/phobert-base", 
+#         num_labels=len(label2id)
+#     )
 def main():
     with open(LABEL_MAP_PATH, "r", encoding="utf8") as f:
         maps = json.load(f)
     event_maps = maps["event_type"]
-    label2id = event_maps["label2id"]
     
+    # 1. Đồng bộ label2id: Đảm bảo có nhãn "O" với ID là 33
+    label2id = event_maps["label2id"].copy()
     if "O" not in label2id:
         label2id["O"] = 33
         
-    id2label = {str(k): v for k, v in event_maps["id2label"].items()}
-    id2label["33"] = "O"
+    # 2. Tạo id2label chuẩn xác dựa trên label2id đã có nhãn "O"
+    # Ép chuỗi cho Key để hàm compute_metrics tra cứu an toàn
+    id2label = {str(v): k for k, v in label2id.items()}
 
     train_dataset = BKEEEventTypeDataset(DATA_DIR / "train.json", label2id)
     dev_dataset = BKEEEventTypeDataset(DATA_DIR / "dev.json", label2id)
 
+    # Lúc này num_labels sẽ bằng 34 (bao gồm cả nhãn "O")
     model = AutoModelForTokenClassification.from_pretrained(
         "vinai/phobert-base", 
         num_labels=len(label2id)
     )
-
     # ========================================================
     # ========================================================
     # KÍCH HOẠT CONFIG QUANTIZATION-AWARE TRAINING (QAT)
