@@ -236,7 +236,7 @@ DATA_DIR = ROOT_DIR / "data" / "preprocessed" / "event_type"
 LABEL_MAP_PATH = ROOT_DIR / "data" / "preprocessed" / "label_maps.json"
 
 class BKEEEventTypeDataset(torch.utils.data.Dataset):
-    def __init__(self, data_path, label2id, tokenizer_name="vinai/phobert-base", max_len=256):
+    def __init__(self, data_path, label2id, tokenizer=None, tokenizer_name="vinai/phobert-base", max_len=256):
         with open(data_path, "r", encoding="utf8") as f:    
             self.data = json.load(f)
         
@@ -244,10 +244,8 @@ class BKEEEventTypeDataset(torch.utils.data.Dataset):
         if "O" not in self.label2id:
             self.label2id["O"] = 33
 
-        # SỬA DÒNG NÀY: Ép buộc sử dụng phiên bản Fast để có hàm word_ids()
-        # SỬA DÒNG NÀY: Bổ sung tham số add_prefix_space=True
-        self.tokenizer = RobertaTokenizerFast.from_pretrained(
-            tokenizer_name, 
+        self.tokenizer = tokenizer if tokenizer is not None else RobertaTokenizerFast.from_pretrained(
+            tokenizer_name,
             add_prefix_space=True
         )
         self.max_len = max_len
@@ -262,12 +260,13 @@ class BKEEEventTypeDataset(torch.utils.data.Dataset):
         # Khởi tạo danh sách nhãn nền "O"
         labels = ["O"] * len(words)
         
-        # Đọc từ trường trigger.start và event_type của data thực tế chặng Event
+        # Đọc từ trường trigger.start/trigger.end và event_type của data thực tế chặng Event
         if "trigger" in item and "event_type" in item:
-            start_idx = item["trigger"]["start"]
+            start_idx = item["trigger"].get("start", 0)
+            end_idx = item["trigger"].get("end", start_idx + 1)
             event_str = item["event_type"]
-            if start_idx < len(labels):
-                labels[start_idx] = event_str
+            for idx in range(start_idx, min(end_idx, len(labels))):
+                labels[idx] = event_str
 
         encoding = self.tokenizer(
             words,
@@ -386,14 +385,16 @@ def main():
     # Ép chuỗi cho Key để hàm compute_metrics tra cứu an toàn
     id2label = {str(v): k for k, v in label2id.items()}
 
-    train_dataset = BKEEEventTypeDataset(DATA_DIR / "train.json", label2id)
-    dev_dataset = BKEEEventTypeDataset(DATA_DIR / "dev.json", label2id)
+    tokenizer = RobertaTokenizerFast.from_pretrained("vinai/phobert-base", add_prefix_space=True)
+    train_dataset = BKEEEventTypeDataset(DATA_DIR / "train.json", label2id, tokenizer=tokenizer)
+    dev_dataset = BKEEEventTypeDataset(DATA_DIR / "dev.json", label2id, tokenizer=tokenizer)
 
     # Lúc này num_labels sẽ bằng 34 (bao gồm cả nhãn "O")
     model = AutoModelForTokenClassification.from_pretrained(
         "vinai/phobert-base", 
         num_labels=len(label2id)
     )
+    model.resize_token_embeddings(len(tokenizer))
     # ========================================================
     # ========================================================
     # KÍCH HOẠT CONFIG QUANTIZATION-AWARE TRAINING (QAT)

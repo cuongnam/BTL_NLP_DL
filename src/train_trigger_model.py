@@ -206,13 +206,12 @@ DATA_DIR = ROOT_DIR / "data" / "preprocessed" / "trigger"
 LABEL_MAP_PATH = ROOT_DIR / "data" / "preprocessed" / "label_maps.json"
 
 class BKEETriggerDataset(torch.utils.data.Dataset):
-    def __init__(self, data_path, label2id, tokenizer_name="vinai/phobert-base", max_len=256):
+    def __init__(self, data_path, label2id, tokenizer=None, tokenizer_name="vinai/phobert-base", max_len=256):
         with open(data_path, "r", encoding="utf8") as f:
             self.data = json.load(f)
         self.label2id = label2id
-        # SỬA DÒNG NÀY: Bổ sung tham số add_prefix_space=True
-        self.tokenizer = RobertaTokenizerFast.from_pretrained(
-            tokenizer_name, 
+        self.tokenizer = tokenizer if tokenizer is not None else RobertaTokenizerFast.from_pretrained(
+            tokenizer_name,
             add_prefix_space=True
         )
         self.max_len = max_len
@@ -288,15 +287,17 @@ def main():
     label2id = trigger_maps["label2id"]
     id2label = {str(k): v for k, v in trigger_maps["id2label"].items()}
 
-    train_dataset = BKEETriggerDataset(DATA_DIR / "train.json", label2id)
-    dev_dataset = BKEETriggerDataset(DATA_DIR / "dev.json", label2id)
+    tokenizer = RobertaTokenizerFast.from_pretrained("vinai/phobert-base", add_prefix_space=True)
+    train_dataset = BKEETriggerDataset(DATA_DIR / "train.json", label2id, tokenizer=tokenizer)
+    dev_dataset = BKEETriggerDataset(DATA_DIR / "dev.json", label2id, tokenizer=tokenizer)
     # THÊM DÒNG NÀY: Khởi tạo tập kiểm thử độc lập
-    # test_dataset = BKEETriggerDataset(DATA_DIR / "test.json", label2id)
+    # test_dataset = BKEETriggerDataset(DATA_DIR / "test.json", label2id, tokenizer=tokenizer)
     # 1. Khởi tạo mô hình nền gốc FP32
     model = AutoModelForTokenClassification.from_pretrained(
         "vinai/phobert-base", 
         num_labels=len(label2id)
     )
+    model.resize_token_embeddings(len(tokenizer))
 
     # ========================================================
     # ========================================================

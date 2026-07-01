@@ -224,14 +224,12 @@ DATA_DIR = ROOT_DIR / "data" / "preprocessed" / "argument"
 LABEL_MAP_PATH = ROOT_DIR / "data" / "preprocessed" / "label_maps.json"
 
 class BKEEArgumentDataset(torch.utils.data.Dataset):
-    def __init__(self, data_path, label2id, tokenizer_name="xlm-roberta-base", max_len=256):
+    def __init__(self, data_path, label2id, tokenizer=None, tokenizer_name="xlm-roberta-base", max_len=256):
         with open(data_path, "r", encoding="utf8") as f:
             self.data = json.load(f)
         self.label2id = label2id
-        self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
-        
-        # ĐĂNG KÝ TOKEN ĐẶC BIỆT: Yêu cầu Tokenizer hiểu thẻ marker kích hoạt trigger
-        self.tokenizer.add_tokens(["<tg>", "</tg>"], special_tokens=True)
+        self.tokenizer = tokenizer if tokenizer is not None else AutoTokenizer.from_pretrained(tokenizer_name)
+        self.tokenizer.add_special_tokens({'additional_special_tokens': ['<tg>', '</tg>']})
         self.max_len = max_len
 
     def __len__(self):
@@ -270,14 +268,14 @@ def compute_metrics(p, id2label):
     predictions, labels = p
     predictions = np.argmax(predictions, axis=2)
 
-    true_predictions = [
-        [id2label[p_id] for (p_id, l_id) in zip(prediction, label) if l_id != -100]
-        for prediction, label in zip(predictions, labels)
-    ]
-    true_labels = [
-        [id2label[l_id] for (p_id, l_id) in zip(prediction, label) if l_id != -100]
-        for prediction, label in zip(predictions, labels)
-    ]
+    true_predictions = []
+    true_labels = []
+
+    for prediction, label in zip(predictions, labels):
+        for p_id, l_id in zip(prediction, label):
+            if l_id != -100:
+                true_predictions.append(id2label.get(str(p_id), "O"))
+                true_labels.append(id2label.get(str(l_id), "O"))
 
     return {
         "precision": precision_score(true_labels, true_predictions, zero_division=0),
@@ -290,18 +288,20 @@ def main():
         maps = json.load(f)
     argument_maps = maps["argument"]
     label2id = argument_maps["label2id"]
-    id2label = {int(k): v for k, v in argument_maps["id2label"].items()}
+    id2label = {str(v): k for k, v in label2id.items()}
 
-    train_dataset = BKEEArgumentDataset(DATA_DIR / "train.json", label2id)
-    dev_dataset = BKEEArgumentDataset(DATA_DIR / "dev.json", label2id)
+    tokenizer = AutoTokenizer.from_pretrained("xlm-roberta-base")
+    tokenizer.add_special_tokens({'additional_special_tokens': ['<tg>', '</tg>']})
+
+    train_dataset = BKEEArgumentDataset(DATA_DIR / "train.json", label2id, tokenizer=tokenizer)
+    dev_dataset = BKEEArgumentDataset(DATA_DIR / "dev.json", label2id, tokenizer=tokenizer)
 
     model = AutoModelForTokenClassification.from_pretrained(
         "xlm-roberta-base", 
         num_labels=len(label2id)
     )
     
-    # Đồng bộ cấu hình từ vựng có chứa thẻ mồi cho ma trận embedding XLM-R
-    model.resize_token_embeddings(len(train_dataset.tokenizer))
+    model.resize_token_embeddings(len(tokenizer))
 
     # ========================================================
     # KÍCH HOẠT CONFIG QUANTIZATION-AWARE TRAINING (QAT)
