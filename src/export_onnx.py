@@ -62,7 +62,7 @@ def export_and_quantize_model(model_folder_name, output_name, is_xlmr=False, num
         input_names=['input_ids', 'attention_mask'],
         output_names=['logits'],
         dynamic_axes=dynamic_axes,
-        opset_version=14,  # Phiên bản toán tử khuyên dùng cho Transformer
+        opset_version=18,  # Sử dụng phiên bản mới hơn cho LayerNorm và Transformer
         do_constant_folding=True
     )
     print(f"-> Đã lưu file gốc FP32 tại: {onnx_fp32_path}")
