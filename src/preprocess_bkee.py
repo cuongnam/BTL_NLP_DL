@@ -531,65 +531,6 @@ def create_argument_labels(record: Dict,
     return labels
 
 
-# ============================================================
-# ARGUMENT DATASET
-# ============================================================
-
-
-# def build_argument_dataset(records: List[Dict]) -> List[Dict]:
-#     """
-#     One event = one sample.
-#     """
-
-#     dataset = []
-
-#     for record in records:
-
-#         for event in record["event_mentions"]:
-
-#             trigger = event["trigger"]
-
-#             sample = {
-
-#                 "id": event["id"],
-
-#                 "doc_id": record["doc_id"],
-
-#                 "sentence": record["sentence"],
-
-#                 "tokens": record["tokens"],
-
-#                 "pieces": record["pieces"],
-
-#                 "token_lens": record["token_lens"],
-
-#                 "trigger": {
-
-#                     "text": trigger["text"],
-
-#                     "start": trigger["start"],
-
-#                     "end": trigger["end"]
-
-#                 },
-
-#                 "event_type": event["event_type"],
-
-#                 "argument_labels":
-#                     create_argument_labels(
-#                         record,
-#                         event
-#                     )
-
-#             }
-
-#             dataset.append(sample)
-
-#     logger.info(
-#         f"Argument dataset created : {len(dataset)} samples"
-#     )
-
-#     return dataset
 
 def build_argument_dataset(records: List[Dict]) -> List[Dict]:
     """

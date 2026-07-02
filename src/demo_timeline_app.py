@@ -9,6 +9,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import json
+import re
 from datetime import datetime
 # CODE MỚI ĐÃ ĐỒNG BỘ
 from timeline_generator import BKEEEventPyTorchPipeline as BKEEEventPipeline
@@ -48,6 +49,16 @@ with col1:
         placeholder="Ví dụ: Công_ty FPT vừa đầu_tư 50 triệu USD vào doanh_nghiệp công_nghệ tại Mỹ ."
     )
     
+    # Tự động chuyển câu nhập về dạng từ ghép nối bằng dấu _
+    def normalize_compound_words(text: str) -> str:
+        text = re.sub(r"\s+", " ", text.strip())
+        text = re.sub(r"(?<!\w)([A-Za-zÀ-ỹ]+)\s+([A-Za-zÀ-ỹ]+)(?=\s|$)", lambda m: f"{m.group(1)}_{m.group(2)}", text)
+        return text
+
+    normalized_input = normalize_compound_words(user_input)
+    if normalized_input != user_input:
+        st.markdown("**Đã tự động chuyển đổi câu sang dạng từ ghép bằng `_` để cải thiện nhận diện mô hình.**")
+
     # Cấu hình Ngày neo ngữ cảnh phục vụ chặng chuẩn hóa thời gian máy đọc (Chặng 4)
     anchor_date = st.date_input("Ngày neo ngữ cảnh (Anchor Date phục vụ chuẩn hóa):", datetime(2026, 6, 30))
     anchor_date_str = anchor_date.strftime("%Y-%m-%d")
@@ -60,7 +71,7 @@ with col2:
     
     if submit_btn and user_input.strip():
         # Hỗ trợ tách văn bản nếu người dùng nhập nhiều câu bằng dấu chấm hoặc xuống dòng
-        raw_sentences = [s.strip() for s in user_input.replace("\n", ".").split(".") if s.strip()]
+        raw_sentences = [s.strip() for s in normalized_input.replace("\n", ".").split(".") if s.strip()]
         
         all_extracted_events = []
         
