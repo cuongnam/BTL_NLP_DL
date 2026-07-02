@@ -353,7 +353,7 @@ from time_normalizer import normalize_vietnamese_time
 
 # Cấu hình đường dẫn hệ thống
 ROOT_DIR = Path(__file__).resolve().parent.parent
-MODELS_DIR = ROOT_DIR / "models" / "onnx_optimized"
+MODELS_DIR = ROOT_DIR / "models" 
 LABEL_MAP_PATH = ROOT_DIR / "data" / "preprocessed" / "label_maps.json"
 
 class BKEEEventPyTorchPipeline:
