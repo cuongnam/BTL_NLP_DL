@@ -153,10 +153,11 @@ def main():
 
     training_args = TrainingArguments(
         # output_dir="./results",
-        num_train_epochs=5,
+        num_train_epochs=10,
         per_device_train_batch_size=8,
         per_device_eval_batch_size=8,
-        warmup_steps=100,
+        learning_rate=5e-5,
+        warmup_steps=0.1,
         weight_decay=0.01,
         logging_dir="./logs",
         logging_steps=10,

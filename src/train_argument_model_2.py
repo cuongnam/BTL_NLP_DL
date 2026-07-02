@@ -164,11 +164,13 @@ def main():
     # Cấu hình siêu tham số huấn luyện (Chạy 5 Epoch)
     training_args = TrainingArguments(
         output_dir="./results_argument_xlmr",
-        num_train_epochs=5,
+        num_train_epochs=10,
         per_device_train_batch_size=16, 
         per_device_eval_batch_size=16,
-        learning_rate=2e-5,             
-        warmup_steps=100,
+        # learning_rate=2e-5,             
+        # warmup_steps=100,
+        learning_rate=5e-5,               # Tăng tốc độ học lên 5e-5
+        warmup_ratio=0.1,                 # Warmup theo tỉ lệ 10% tổng steps
         weight_decay=0.01,
         logging_dir="./logs_argument_xlmr",
         logging_steps=10,
