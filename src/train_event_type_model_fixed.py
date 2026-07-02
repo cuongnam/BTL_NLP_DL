@@ -2,8 +2,8 @@ from pathlib import Path
 import json
 import numpy as np
 import torch
-from transformers import AutoTokenizer, AutoModelForTokenClassification, TrainingArguments, Trainer
-from transformers import DataCollatorForTokenClassification
+from transformers import AutoModelForTokenClassification, TrainingArguments, Trainer
+from transformers import DataCollatorForTokenClassification, RobertaTokenizerFast
 from sklearn.metrics import precision_recall_fscore_support
 
 try:
@@ -25,9 +25,8 @@ class BKEEEventTypeDataset(torch.utils.data.Dataset):
         if "O" not in self.label2id:
             self.label2id["O"] = 33
 
-        self.tokenizer = tokenizer if tokenizer is not None else AutoTokenizer.from_pretrained(
+        self.tokenizer = tokenizer if tokenizer is not None else RobertaTokenizerFast.from_pretrained(
             tokenizer_name,
-            use_fast=True,
             add_prefix_space=True,
         )
         self.max_len = max_len
@@ -114,7 +113,9 @@ def main():
 
     id2label = {str(v): k for k, v in label2id.items()}
 
-    tokenizer = AutoTokenizer.from_pretrained("vinai/phobert-base", use_fast=True, add_prefix_space=True)
+    tokenizer = RobertaTokenizerFast.from_pretrained("vinai/phobert-base", add_prefix_space=True)
+    if not tokenizer.is_fast:
+        raise RuntimeError("The tokenizer loaded for event-type training is not a fast tokenizer. Aborting.")
     train_dataset = BKEEEventTypeDataset(DATA_DIR / "train.json", label2id, tokenizer=tokenizer)
     dev_dataset = BKEEEventTypeDataset(DATA_DIR / "dev.json", label2id, tokenizer=tokenizer)
 
