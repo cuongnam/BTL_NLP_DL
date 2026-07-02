@@ -94,22 +94,22 @@ class BKEEEventPipeline:
         if current_trigger:
             detected_triggers.append(current_trigger)
 
-        # if not detected_triggers:
-        #     keywords_rescue = {
-        #         "bổ_nhiệm": "Thay_đổi_nhân_sự",
-        #         "khởi_tố": "Pháp_lý",
-        #         "đầu_tư": "Đầu_tư",
-        #         "thành_lập": "Thành_lập",
-        #     }
-        #     for w_idx, w in enumerate(words):
-        #         w_clean = w.lower()
-        #         if w_clean in keywords_rescue:
-        #             detected_triggers.append({
-        #                 "start": w_idx,
-        #                 "end": w_idx + 1,
-        #                 "text": words[w_idx],
-        #                 "predicted_label": keywords_rescue[w_clean],
-        #             })
+        if not detected_triggers:
+            keywords_rescue = {
+                "bổ_nhiệm": "Thay_đổi_nhân_sự",
+                "khởi_tố": "Pháp_lý",
+                "đầu_tư": "Đầu_tư",
+                "thành_lập": "Thành_lập",
+            }
+            for w_idx, w in enumerate(words):
+                w_clean = w.lower()
+                if w_clean in keywords_rescue:
+                    detected_triggers.append({
+                        "start": w_idx,
+                        "end": w_idx + 1,
+                        "text": words[w_idx],
+                        "predicted_label": keywords_rescue[w_clean],
+                    })
 
         unique_triggers = []
         seen_ranges = set()
