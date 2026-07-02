@@ -103,22 +103,19 @@ def compute_metrics(p, id2label):
         pred_list = []
         label_list = []
         for p_id, l_id in zip(prediction, label):
-            if l_id != -100:  # Bỏ qua các token đặc biệt và token subword thứ 2 trở đi
-                # Ép khóa tìm kiếm sang dạng chuỗi (string) để khớp tuyệt đối với nhãn của label_maps.json
-                p_str = str(p_id)
-                l_str = str(l_id)
-                
+            if int(l_id) != -100:
+                p_str = str(int(p_id))
+                l_str = str(int(l_id))
                 pred_list.append(id2label.get(p_str, "O"))
                 label_list.append(id2label.get(l_str, "O"))
-                
+
         true_predictions.append(pred_list)
         true_labels.append(label_list)
 
-    # Đề phòng trường hợp chưa hội tụ ở Epoch đầu, tránh lỗi chia cho 0
     try:
-        p_score = precision_score(true_labels, true_predictions)
-        r_score = recall_score(true_labels, true_predictions)
-        f1 = f1_score(true_labels, true_predictions)
+        p_score = precision_score(true_labels, true_predictions, zero_division=0)
+        r_score = recall_score(true_labels, true_predictions, zero_division=0)
+        f1 = f1_score(true_labels, true_predictions, zero_division=0)
     except Exception:
         p_score, r_score, f1 = 0.0, 0.0, 0.0
 
