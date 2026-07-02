@@ -370,7 +370,7 @@ class BKEEEventPyTorchPipeline:
         # 2. Khởi tạo Tokenizer kép (Giữ nguyên cấu hình mồi khoảng trắng ẩn)
         self.phobert_tok = RobertaTokenizerFast.from_pretrained("vinai/phobert-base", add_prefix_space=True)
         self.xlmr_tok = AutoTokenizer.from_pretrained("xlm-roberta-base")
-        self.xlmr_tok.add_tokens(["<tg>", "</tg>"], special_tokens=True)
+        self.xlmr_tok.add_special_tokens({'additional_special_tokens': ['<tg>', '</tg>']})
 
         # 3. Tự động kiểm tra thiết bị phần cứng (Ưu tiên GPU CUDA nếu có trên Kaggle)
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -469,7 +469,7 @@ class BKEEEventPyTorchPipeline:
             for idx, w_idx in enumerate(xlmr_word_ids):
                 if w_idx is None or w_idx >= len(marked_words):
                     continue
-                if marked_words[w_idx] in ["<tg>", "</vision>", "</tg>"]:
+                if marked_words[w_idx] in ["<tg>", "</tg>"]:
                     continue
 
                 pred_id = arg_preds[idx]
