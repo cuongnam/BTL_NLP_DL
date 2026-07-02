@@ -379,9 +379,9 @@ class BKEEEventPyTorchPipeline:
         # 4. Nạp trực tiếp 3 mô hình PyTorch gốc từ thư mục models của bạn
         print("[Pipeline PyTorch] Đang tải các checkpoint mô hình gốc FP32...")
         
-        self.model_trigger = AutoModelForTokenClassification.from_pretrained(MODELS_DIR / "phobert_trigger_int8.onnx").to(self.device)
-        self.model_event = AutoModelForTokenClassification.from_pretrained(MODELS_DIR / "phobert_event_type_int8.onnx").to(self.device)
-        self.model_argument = AutoModelForTokenClassification.from_pretrained(MODELS_DIR / "xlmr_argument_int8.onnx").to(self.device)
+        self.model_trigger = AutoModelForTokenClassification.from_pretrained(MODELS_DIR / "best_phobert_trigger").to(self.device)
+        self.model_event = AutoModelForTokenClassification.from_pretrained(MODELS_DIR / "best_phobert_event_type").to(self.device)
+        self.model_argument = AutoModelForTokenClassification.from_pretrained(MODELS_DIR / "best_xlmr_argument").to(self.device)
         
         # Đồng bộ kích thước embedding của XLM-R vì có thêm thẻ marker <tg>
         self.model_argument.resize_token_embeddings(len(self.xlmr_tok))
